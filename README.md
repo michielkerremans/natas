@@ -555,4 +555,196 @@ And you will get `/etc/natas_webpass/natas11:UJdqkK1pTu6VLt9UHWAgRZz6sVUZ3lEk` i
 
 #### The Solution
 
+Use CTRL + U to view the page source. And notice:
 
+```html
+<div id="content">
+<body style="background: #ffffff;">
+Cookies are protected with XOR encryption<br/><br/>
+
+
+<form>
+Background color: <input name=bgcolor value="#ffffff">
+<input type=submit value="Set color">
+</form>
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?
+
+$defaultdata = array( "showpassword"=>"no", "bgcolor"=>"#ffffff");
+
+function xor_encrypt($in) {
+    $key = '<censored>';
+    $text = $in;
+    $outText = '';
+
+    // Iterate through each character
+    for($i=0;$i<strlen($text);$i++) {
+    $outText .= $text[$i] ^ $key[$i % strlen($key)];
+    }
+
+    return $outText;
+}
+
+function loadData($def) {
+    global $_COOKIE;
+    $mydata = $def;
+    if(array_key_exists("data", $_COOKIE)) {
+    $tempdata = json_decode(xor_encrypt(base64_decode($_COOKIE["data"])), true);
+    if(is_array($tempdata) && array_key_exists("showpassword", $tempdata) && array_key_exists("bgcolor", $tempdata)) {
+        if (preg_match('/^#(?:[a-f\d]{6})$/i', $tempdata['bgcolor'])) {
+        $mydata['showpassword'] = $tempdata['showpassword'];
+        $mydata['bgcolor'] = $tempdata['bgcolor'];
+        }
+    }
+    }
+    return $mydata;
+}
+
+function saveData($d) {
+    setcookie("data", base64_encode(xor_encrypt(json_encode($d))));
+}
+
+$data = loadData($defaultdata);
+
+if(array_key_exists("bgcolor",$_REQUEST)) {
+    if (preg_match('/^#(?:[a-f\d]{6})$/i', $_REQUEST['bgcolor'])) {
+        $data['bgcolor'] = $_REQUEST['bgcolor'];
+    }
+}
+
+saveData($data);
+
+
+
+?>
+```
+
+Notice `setcookie("data", base64_encode(xor_encrypt(json_encode($d))));`.
+This means that the cookie is a base64 encoded, XOR encrypted JSON string!
+`XOR` encryption is **symmetric**, so we can just use the same function to decrypt it!
+
+And notice `$mydata['showpassword'] = $tempdata['showpassword'];`.
+So if we set `showpassword` to `yes` in the **cookie**, it will be shown on the page!
+
+<u>Why is XOR symmetric?</u>
+
+- XOR with `1`: `b ^ 1 = ~b` and `~b ^ 1 = b`
+- XOR with `0`: `b ^ 0 = b` and `b ^ b = 0`
+- XOR with `k`: `b ^ k = c` and `c ^ k = b`
+
+So `plaintext XOR key = ciphertext` and `ciphertext XOR key = plaintext`.
+
+[level-11\cookie.php](level-11\cookie.php)
+```php
+<?php
+
+if ($argc < 2) {
+  die("Usage: php {$argv[0]} COOKIE_VALUE\n");
+}
+
+$default_cookie = $argv[1];
+
+$known_plaintext = json_encode([
+  "showpassword" => "no",
+  "bgcolor" => "#ffffff"
+]);
+
+# XOR is symmetric
+# plaintext XOR key = ciphertext
+# ciphertext XOR key = plaintext
+
+# Why?
+# b ^ 1 = ~b and b ^ ~b = 1
+# b ^ 0 = b and b ^ b = 0
+# b ^ k = c and c ^ k = b
+
+function xor_encrypt($data, $key)
+{
+  $out = '';
+  for ($i = 0; $i < strlen($data); $i++) {
+    $out .= $data[$i] ^ $key[$i % strlen($key)];
+    # $key[$i % strlen($key)] : repeats the key if it's shorter than the data!
+  }
+  return $out;
+}
+
+$cipher = base64_decode($default_cookie);
+
+$key_stream = '';
+
+for ($i = 0; $i < strlen($cipher); $i++) {
+  $key_stream .= $cipher[$i] ^ $known_plaintext[$i % strlen($known_plaintext)];
+}
+
+echo "Recovered keystream: " . $key_stream . "\n";
+
+echo "Enter key length: ";
+$key_length = intval(trim(fgets(STDIN)));
+$key = substr($key_stream, 0, $key_length);
+echo "\nRecovered key: $key\n\n";
+
+$new_plaintext = json_encode([
+  "showpassword" => "yes",
+  "bgcolor" => "#ffffff"
+]);
+
+$new_cipher = xor_encrypt($new_plaintext, $key);
+$new_cookie = base64_encode($new_cipher);
+echo "New cookie value: $new_cookie\n";
+```
+
+Run `php level-11\cookie.php`.
+Identify how long the key is by looking for repetitions in the keystream.
+And you will get the new cookie value that you can set in the browser!
+
+```powershell
+PS C:\Users\michiel\vives2\CYBERSECURITY\labo\03_NATAS\natas> php .\level-11\cookie.php HmYkBwozJw4WNyAAFyB1VUcqOE1JZjUIBis7ABdmbU1GIjEJAyIxTRg%3D
+Recovered keystream: eDWoeDWoeDWoeDWoeDWoeDWoeDWoeDWoeDWoeDWoeL
+Enter key length: 4
+
+Recovered key: eDWo
+
+New cookie value: HmYkBwozJw4WNyAAFyB1VUc9MhxHaHUNAic4Awo2dVVHZzEJAyIxCUc5
+```
+
+Go to the browser's DevTools (F12) > Application tab > Cookies and set the `data` cookie to `HmYkBwozJw4WNyAAFyB1VUc9MhxHaHUNAic4Awo2dVVHZzEJAyIxCUc5`.
+
+Refresh the page and you will see:
+```html
+<div id="content">
+<body style="background: #ffffff;">
+Cookies are protected with XOR encryption<br/><br/>
+
+The password for natas12 is yZdkjAYZRd3R7tq7T5kXMjMJlOIkzDeB<br>
+<form>
+Background color: <input name=bgcolor value="#ffffff">
+<input type=submit value="Set color">
+</form>
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+#### The Lesson
+
+Don't use **XOR encryption** for sensitive data because it's easily breakable with known **plaintext attacks**!
+
+### Level 12
+
+- **Date**: 2026-03-15
+- **URL**: `http://natas12.natas.labs.overthewire.org`
+- **Password**: `yZdkjAYZRd3R7tq7T5kXMjMJlOIkzDeB`
+- **Tools**: Web Browser
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
