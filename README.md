@@ -2322,7 +2322,127 @@ Don’t rely on redirection to protect sensitive information — it doesn’t st
 - **Date**: 2026-04-05
 - **URL**: `http://natas23.natas.labs.overthewire.org`
 - **Password**: `dIUQcI3uSus1JEOSSWRAEXBG8KbR8tRs`
-- **Tools**: Web Browser, `curl`
+- **Tools**: Web Browser, `PHP`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+Password:
+<form name="input" method="get">
+    <input type="text" name="passwd" size=20>
+    <input type="submit" value="Login">
+</form>
+
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+    if(array_key_exists("passwd",$_REQUEST)){
+        if(strstr($_REQUEST["passwd"],"iloveyou") && ($_REQUEST["passwd"] > 10 )){
+            echo "<br>The credentials for the next level are:<br>";
+            echo "<pre>Username: natas24 Password: <censored></pre>";
+        }
+        else{
+            echo "<br>Wrong!<br>";
+        }
+    }
+    // morla / 10111
+?>
+```
+
+- `strstr()` checks if the second argument is a substring of the first.
+- `($_REQUEST["passwd"] > 10 )` compares the string to a number, causing PHP to implicitly convert it to an integer.
+
+So we need to find a string that contains `iloveyou` and whose integer value is **greater than 10**.
+
+This of course depends on how `PHP` evaluates the string as an integer.
+
+Let's check `iloveyou`:
+```powershell
+php -r "var_dump((int)'iloveyou');"
+```
+
+Output:
+```text
+int(0)
+```
+
+Let's try a number greater than 10, like `11`:
+```powershell
+php -r "var_dump((int)'11');"
+```
+
+Output:
+```text
+int(11)
+```
+
+That works! But it does **not** contain `iloveyou`.
+
+What about the combination?
+```powershell
+php -r "var_dump((int)'iloveyou11');"
+```
+
+Output:
+```text
+int(0)
+```
+
+We get the same result as for just `iloveyou`.
+
+What about `11iloveyou`?
+```powershell
+php -r "var_dump((int)'11iloveyou');"
+```
+
+Output:
+```text
+int(11)
+```
+
+Bingo! That's it, we get `11` and `iloveyou` is included!
+
+So `PHP` only parses numbers at the **start** of the string.
+
+Now fill in `11iloveyou` in the form and submit it.
+
+You'll get:
+```html
+<div id="content">
+
+Password:
+<form name="input" method="get">
+    <input type="text" name="passwd" size=20>
+    <input type="submit" value="Login">
+</form>
+
+<br>The credentials for the next level are:<br><pre>Username: natas24 Password: MeuqmfJ8DDKuTr5pcvzFKSwlxedZYEWd</pre>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+And the password for natas24 is `MeuqmfJ8DDKuTr5pcvzFKSwlxedZYEWd`.
+
+#### The Lesson
+
+Be careful when comparing strings to numbers in PHP — type juggling can break your logic.
+
+### Level 24
+
+- **Date**: 2026-04-05
+- **URL**: `http://natas24.natas.labs.overthewire.org`
+- **Password**: `MeuqmfJ8DDKuTr5pcvzFKSwlxedZYEWd`
+- **Tools**: Web Browser
 
 #### The Solution
 
