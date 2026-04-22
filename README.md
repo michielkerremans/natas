@@ -3078,3 +3078,193 @@ Don’t unserialize **untrusted** data — it allows object injection. Use safer
 Use CTRL + U to view the page source. And notice:
 
 ```html
+<h1>natas27</h1>
+<div id="content">
+
+<form action="index.php" method="POST">
+Username: <input name="username"><br>
+Password: <input name="password" type="password"><br>
+<input type="submit" value="login" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+```php
+<?php
+
+// morla / 10111
+// database gets cleared every 5 min
+
+
+/*
+CREATE TABLE `users` (
+  `username` varchar(64) DEFAULT NULL,
+  `password` varchar(64) DEFAULT NULL
+);
+*/
+
+
+function checkCredentials($link,$usr,$pass){
+
+    $user=mysqli_real_escape_string($link, $usr);
+    $password=mysqli_real_escape_string($link, $pass);
+
+    $query = "SELECT username from users where username='$user' and password='$password' ";
+    $res = mysqli_query($link, $query);
+    if(mysqli_num_rows($res) > 0){
+        return True;
+    }
+    return False;
+}
+
+
+function validUser($link,$usr){
+
+    $user=mysqli_real_escape_string($link, $usr);
+
+    $query = "SELECT * from users where username='$user'";
+    $res = mysqli_query($link, $query);
+    if($res) {
+        if(mysqli_num_rows($res) > 0) {
+            return True;
+        }
+    }
+    return False;
+}
+
+
+function dumpData($link,$usr){
+
+    $user=mysqli_real_escape_string($link, trim($usr));
+
+    $query = "SELECT * from users where username='$user'";
+    $res = mysqli_query($link, $query);
+    if($res) {
+        if(mysqli_num_rows($res) > 0) {
+            while ($row = mysqli_fetch_assoc($res)) {
+                // thanks to Gobo for reporting this bug!
+                //return print_r($row);
+                return print_r($row,true);
+            }
+        }
+    }
+    return False;
+}
+
+
+function createUser($link, $usr, $pass){
+
+    if($usr != trim($usr)) {
+        echo "Go away hacker";
+        return False;
+    }
+    $user=mysqli_real_escape_string($link, substr($usr, 0, 64));
+    $password=mysqli_real_escape_string($link, substr($pass, 0, 64));
+
+    $query = "INSERT INTO users (username,password) values ('$user','$password')";
+    $res = mysqli_query($link, $query);
+    if(mysqli_affected_rows($link) > 0){
+        return True;
+    }
+    return False;
+}
+
+
+if(array_key_exists("username", $_REQUEST) and array_key_exists("password", $_REQUEST)) {
+    $link = mysqli_connect('localhost', 'natas27', '<censored>');
+    mysqli_select_db($link, 'natas27');
+
+
+    if(validUser($link,$_REQUEST["username"])) {
+        //user exists, check creds
+        if(checkCredentials($link,$_REQUEST["username"],$_REQUEST["password"])){
+            echo "Welcome " . htmlentities($_REQUEST["username"]) . "!<br>";
+            echo "Here is your data:<br>";
+            $data=dumpData($link,$_REQUEST["username"]);
+            print htmlentities($data);
+        }
+        else{
+            echo "Wrong password for user: " . htmlentities($_REQUEST["username"]) . "<br>";
+        }
+    }
+    else {
+        //user doesn't exist
+        if(createUser($link,$_REQUEST["username"],$_REQUEST["password"])){
+            echo "User " . htmlentities($_REQUEST["username"]) . " was created!";
+        }
+    }
+
+    mysqli_close($link);
+} else {
+?>
+```
+
+Notice `$user=mysqli_real_escape_string($link, trim($usr));` in `dumpData()`.
+- `trim($usr)` removes whitespace from the beginning and end of the username.
+So "natas28             " becomes "natas28".
+
+But `checkCredentials()` and `validUser()` only have `$user=mysqli_real_escape_string($link, $usr);`.
+So these functions do **not** trim the username, which means that "natas28             " is treated as a different username than "natas28".
+
+So we can create a **new user** with the username "natas28             " (with trailing spaces) and a password, and then log in with that **new** username and password to get the credentials for "natas28"!
+
+**BUT** look at this in `createUser()`:
+```php
+if($usr != trim($usr)) {
+    echo "Go away hacker";
+    return False;
+}
+```
+
+This means that we cannot create a user with trailing spaces in the username!
+The admin anticipated this attack and put a check to prevent it!
+
+Notice `$user=mysqli_real_escape_string($link, substr($usr, 0, 64));` in `createUser()`.
+- `substr($usr, 0, 64)` truncates the username to 64 characters.
+So "natas28[57 SPACES]a" becomes "natas28[57 SPACES]" **after** the check!
+
+All we have to do is create a new user with username `natas28                                                         a` and password `123`.
+
+And then just login with username `natas28                                                         ` (without the 'a') and password `123`.
+
+And you get:
+```html
+<h1>natas27</h1>
+<div id="content">
+Welcome natas28                                                         !<br>Here is your data:<br>Array
+(
+    [username] =&gt; natas28
+    [password] =&gt; 1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj
+)
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+And the password for natas28 is `1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj`.
+
+#### The Lesson
+
+Do not implement **inconsistent handling of the same username** across functions (trim vs no trim vs substr truncation), as this leads to username **identity mismatch** in the database.
+
+### SIDE NOTE FOR THE READER
+
+Up until the previous level, I mostly used [ChatGPT](https://chat.openai.com/) to help me out when I was stuck, and for level 25, as mentioned, I had to go to [Gemini](https://gemini.google.com/). But for this level, both kept insisting that I should log in with `natas28` instead of the padded `natas28      ...` user we created. This obviously did not work, since the stored username actually includes the padding.
+
+I then looked online and stumbled upon this great [Over the wire natas Walkthrough-Level-27 (Hacker4Help)](https://www.youtube.com/watch?v=NuYbU-drS48) video by **Hacker4Help**, which resolved the issue for me immediately. So I highly recommend this series.
+
+From this point on, I will also refer to the **Hacker4Help series** when [ChatGPT](https://chat.openai.com/) and [Gemini](https://gemini.google.com/) fail again.
+
+### Level 28
+
+- **Date**: 2026-04-23
+- **URL**: `http://natas28.natas.labs.overthewire.org`
+- **Password**: `1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj`
+- **Tools**: Web Browser
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
