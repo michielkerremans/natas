@@ -3258,13 +3258,178 @@ From this point on, I will also refer to the **Hacker4Help series** when [ChatGP
 
 ### Level 28
 
-- **Date**: 2026-04-23
+- **Date**: 2026-04-28
 - **URL**: `http://natas28.natas.labs.overthewire.org`
 - **Password**: `1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj`
-- **Tools**: Web Browser
+- **Tools**: Web Browser, `curl`, `PHP`
 
 #### The Solution
 
 Use CTRL + U to view the page source. And notice:
 
 ```html
+<h1>natas28</h1>
+<div id="content">
+
+<form action="index.php" method="POST">
+    <h2> Whack Computer Joke Database</h2>
+    Search: <input name="query"><br>
+    <input type="submit" value="search" />
+</form>
+
+
+<div id="viewsource">sorry, we are currently out of sauce</div>
+</div>
+```
+
+`URL/index-source.html` returns a 404 Not Found error, which means that the source code is not available to us.
+
+Let's try to put in a query and see what happens.
+
+Put `joke` into the search field and click the search button!
+
+Submitting the query redirects to:
+```txt
+http://natas28.natas.labs.overthewire.org/search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIQgA1C82eT1228lUHOW3X2KSh%2FPMVHnhLmbzHIY7GAR1bVcy3Ix3D2Q5cVi8F6bmY%3D
+```
+
+Notice that `query string`!
+
+And the page shows:
+```html
+<h2> Whack Computer Joke Database</h2><ul><li>I've got a really good UDP joke to tell you, but I don't know if you'll get it</li></ul>
+```
+
+That is funny indeed! :D
+
+Now let's see if we can do this again but with `curl.exe` in our terminal:
+```powershell
+curl.exe -L -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj -d "query=joke" "http://natas28.natas.labs.overthewire.org/index.php"
+```
+- `-L, --location` follows redirects. (which we need here for `search.php`)
+
+And we do get:
+```html
+<h2> Whack Computer Joke Database</h2><ul><li>I've got a really good UDP joke to tell you, but I don't know if you'll get it</li></ul>
+```
+again!
+
+Get the `query string` with `curl`:
+```powershell
+curl.exe -s -D - -o NUL -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj -d "query=joke" "http://natas28.natas.labs.overthewire.org/index.php"
+```
+- `-s, --silent` is silent mode
+- `-D, --dump-header <filename>` writes the received headers to <filename> (in this case `-` which is stdout)
+- `-o, --output <file>` writes to file instead of stdout (in this case `NUL` to discard the body)
+
+Output:
+```http
+HTTP/1.1 302 Found
+Date: Mon, 27 Apr 2026 20:07:11 GMT
+Server: Apache/2.4.58 (Ubuntu)
+Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIQgA1C82eT1228lUHOW3X2KSh%2FPMVHnhLmbzHIY7GAR1bVcy3Ix3D2Q5cVi8F6bmY%3D
+Content-Length: 920
+Content-Type: text/html; charset=UTF-8
+```
+
+Let's make a `PHP` script that extracts the `query string` with `curl` for convenience.
+
+[level-28/query.php](level-28/query.php):
+```php
+<?php
+
+if (!isset($argv[1])) {
+  echo "Usage: php query.php <input>\n";
+  exit(1);
+}
+
+$input = $argv[1];
+
+$output = shell_exec(
+  'curl -s -L -D - -o /dev/null -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj ' .
+    '-d "query=' . $input . '" ' .
+    'http://natas28.natas.labs.overthewire.org/index.php'
+);
+
+preg_match('/Location:\s*.*query=([^\s]+)/i', $output, $m);
+
+echo "$m[1]" . PHP_EOL;
+```
+
+`php level-28/query.php joke`:
+```text
+G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIQgA1C82eT1228lUHOW3X2KSh%2FPMVHnhLmbzHIY7GAR1bVcy3Ix3D2Q5cVi8F6bmY%3D
+```
+
+Notice that the `query` parameter is **URL-encoded Base64**.
+
+Let’s write another `PHP` script that **decodes** the `query string` and displays the ciphertext in **16-byte blocks** encoded in `Base64`.
+
+[level-28/decode.php](level-28/decode.php):
+```php
+<?php
+
+$query = trim(file_get_contents("php://stdin"));
+$cipher = base64_decode(urldecode($query));
+$blocks = str_split($cipher, 16);
+
+echo strlen($cipher) . " bytes: ";
+foreach ($blocks as $b) {
+  echo base64_encode($b) . "  ";
+}
+echo PHP_EOL;
+```
+
+First run `cd level-28` to navigate to the level-28 directory (for convenience).
+
+`php query.php joke | php decode.php`:
+```text
+80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  EIANQvNnk9dtvJVBzlt19g==  KSh/PMVHnhLmbzHIY7GARw==  VtVzLcjHcPZDlxWLwXpuZg==
+```
+
+Let's try another search term (that produces jokes) like `computer`.
+
+`php query.php computer`:
+```text
+G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPLOxD5BEouuJBr2svTs3MqTiW3pCIT4YQixZ%2Fi0rqXXY5FyMgUUg%2BaORY%2FQZhZ7MKM%3D
+```
+
+`php query.php computer | php decode.php`:
+```text
+80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  zsQ+QRKLriQa9rL07NzKkw==  iW3pCIT4YQixZ/i0rqXXYw==  kXIyBRSD5o5Fj9BmFnswow==
+```
+
+The **first 2 ciphertext blocks** are identical for *"joke"* and *"computer"*, suggesting a **fixed prefix**.
+
+Let's vary the input length to see how it affects ciphertext **block alignment**:
+```powershell
+1..20 | ForEach-Object { $a = "A" * $_; "$_ : $a : $(php query.php $a | php decode.php)" }
+```
+
+Output (important part):
+```text
+12 : AAAAAAAAAAAA : 80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  h1J9Q3czmMbvHxFKUToAKA==  df1QRP0GPSb2u39zS0HImQ==
+13 : AAAAAAAAAAAAA : 96 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  xkduQZYZ04f0V3MSJfFf4Q==  YiOhTZxCkbmHdbA/vHPU7Q==  2K5R19pxsrCD2Rmg17iLmA==
+```
+
+At 13 characters, an extra ciphertext block appears.
+
+This shows the input fills only ~12 bytes of the first 16-byte block before overflowing into the next block, meaning a fixed prefix is already occupying part of that block.
+This behavior is consistent with a 16-byte block cipher in ECB mode.
+
+Let's try different characters at the end (12th character) (including punctuation):
+```powershell
+php query.php "AAAAAAAAAAAB" | php decode.php
+php query.php "AAAAAAAAAAAc" | php decode.php
+php query.php "AAAAAAAAAAA!" | php decode.php
+php query.php "AAAAAAAAAAA'" | php decode.php
+```
+
+Output:
+```txt
+80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  T0d9WGqFhNi7IDZHOVRzVw==  df1QRP0GPSb2u39zS0HImQ==
+80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  3oT10ThdEDueyRxN8Ed/KQ==  df1QRP0GPSb2u39zS0HImQ==
+80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  g68AP4uzVKIYIhZ9OOygjg==  df1QRP0GPSb2u39zS0HImQ==
+96 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  Zn735bld6KgLc8sEaILMog==  YiOhTZxCkbmHdbA/vHPU7Q==  2K5R19pxsrCD2Rmg17iLmA==
+```
+
