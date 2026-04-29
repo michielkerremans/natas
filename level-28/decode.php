@@ -1,11 +1,10 @@
 <?php
-
-$query = trim(file_get_contents("php://stdin"));
+$query = isset($argv[1]) ? $argv[1] : "";
 $cipher = base64_decode(urldecode($query));
-$blocks = str_split($cipher, 16);
 
-echo strlen($cipher) . " bytes: ";
-foreach ($blocks as $b) {
-  echo base64_encode($b) . "  ";
+echo strlen($cipher) . " bytes\n";
+
+$blocks = str_split($cipher, 16);
+foreach ($blocks as $i => $block) {
+  echo "Block $i: " . bin2hex($block) . "\n";
 }
-echo PHP_EOL;

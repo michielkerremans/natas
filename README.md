@@ -3258,7 +3258,7 @@ From this point on, I will also refer to the **Hacker4Help series** when [ChatGP
 
 ### Level 28
 
-- **Date**: 2026-04-28
+- **Date**: 2026-04-29
 - **URL**: `http://natas28.natas.labs.overthewire.org`
 - **Password**: `1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj`
 - **Tools**: Web Browser, `curl`, `PHP`
@@ -3282,154 +3282,185 @@ Use CTRL + U to view the page source. And notice:
 </div>
 ```
 
-`URL/index-source.html` returns a 404 Not Found error, which means that the source code is not available to us.
+`URL/index-source.html` is **not** available to us.
 
-Let's try to put in a query and see what happens.
+Let's try the word 'joke' in the search field and submit.
 
-Put `joke` into the search field and click the search button!
+The page is redirected to `http://natas28.natas.labs.overthewire.org/search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIQgA1C82eT1228lUHOW3X2KSh%2FPMVHnhLmbzHIY7GAR1bVcy3Ix3D2Q5cVi8F6bmY%3D`.
 
-Submitting the query redirects to:
+And you get:
+```html
+<h2> Whack Computer Joke Database</h2><ul><li>I've got a really good UDP joke to tell you, but I don't know if you'll get it</li></ul>
+```
+
+Very funny indeed! :D
+
+Let's try the word 'computer' in the search field and submit.
+
+The page is redirected to `http://natas28.natas.labs.overthewire.org/search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPLOxD5BEouuJBr2svTs3MqTiW3pCIT4YQixZ%2Fi0rqXXY5FyMgUUg%2BaORY%2FQZhZ7MKM%3D`.
+
+And you get:
+```html
+<h2> Whack Computer Joke Database</h2><ul><li>Q: What is a computer virus?<br />
+A: A terminal illness!</li><li>Q: How do you tell an introverted computer scientist from an extroverted computer scientist?<br />
+A: An extroverted computer scientist looks at your shoes when he talks to you.</li><li>A computer lets you make more mistakes faster than any invention in human history - with the possible exceptions of handguns and tequila.</li></ul>
+```
+
+Also funny, especially the first one! :D
+
+Look at the two `query` strings:
 ```txt
-http://natas28.natas.labs.overthewire.org/search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIQgA1C82eT1228lUHOW3X2KSh%2FPMVHnhLmbzHIY7GAR1bVcy3Ix3D2Q5cVi8F6bmY%3D
+G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIQgA1C82eT1228lUHOW3X2KSh%2FPMVHnhLmbzHIY7GAR1bVcy3Ix3D2Q5cVi8F6bmY%3D
+G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPLOxD5BEouuJBr2svTs3MqTiW3pCIT4YQixZ%2Fi0rqXXY5FyMgUUg%2BaORY%2FQZhZ7MKM%3D
 ```
 
-Notice that `query string`!
+They **both** start with `G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPI`!
+This suggests a **fixed prefix**.
 
-And the page shows:
-```html
-<h2> Whack Computer Joke Database</h2><ul><li>I've got a really good UDP joke to tell you, but I don't know if you'll get it</li></ul>
+These query strings are URL and `Base64` encoded.
+
+Maybe we can decode them and print the decoded ciphertext in 16-byte `Base64`-encoded blocks.
+
+Let's make a `PHP` script that does that.
+
+[level-28/decode.php](level-28/decode.php):
+```php
+<?php
+$query = isset($argv[1]) ? $argv[1] : "";
+$cipher = base64_decode(urldecode($query));
+
+echo strlen($cipher) . " bytes\n";
+
+$blocks = str_split($cipher, 16);
+foreach ($blocks as $i => $block) {
+  echo "Block $i: " . bin2hex($block) . "\n";
+}
 ```
 
-That is funny indeed! :D
+`php decode.php G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIQgA1C82eT1228lUHOW3X2KSh%2FPMVHnhLmbzHIY7GAR1bVcy3Ix3D2Q5cVi8F6bmY%3D` (joke):
+```txt
+80 bytes
+Block 0: 1be82511a7ba5bfd578c0eef466db59c
+Block 1: dc84728fdcf89d93751d10a7c75c8cf2
+Block 2: 10800d42f36793d76dbc9541ce5b75f6
+Block 3: 29287f3cc5479e12e66f31c863b18047
+Block 4: 56d5732dc8c770f64397158bc17a6e66
+```
 
-Now let's see if we can do this again but with `curl.exe` in our terminal:
+`php decode.php G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPLOxD5BEouuJBr2svTs3MqTiW3pCIT4YQixZ%2Fi0rqXXY5FyMgUUg%2BaORY%2FQZhZ7MKM%3D` (computer):
+```txt
+80 bytes
+Block 0: 1be82511a7ba5bfd578c0eef466db59c
+Block 1: dc84728fdcf89d93751d10a7c75c8cf2
+Block 2: cec43e41128bae241af6b2f4ecdcca93
+Block 3: 896de90884f86108b167f8b4aea5d763
+Block 4: 917232051483e68e458fd066167b30a3
+```
+
+And here we see that the **first two blocks** are the same for both queries, which confirms our suspicion of a fixed prefix.
+
+For the next part of our analysis, we will try to get the `query` string with `curl`!
+
 ```powershell
-curl.exe -L -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj -d "query=joke" "http://natas28.natas.labs.overthewire.org/index.php"
-```
-- `-L, --location` follows redirects. (which we need here for `search.php`)
-
-And we do get:
-```html
-<h2> Whack Computer Joke Database</h2><ul><li>I've got a really good UDP joke to tell you, but I don't know if you'll get it</li></ul>
-```
-again!
-
-Get the `query string` with `curl`:
-```powershell
-curl.exe -s -D - -o NUL -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj -d "query=joke" "http://natas28.natas.labs.overthewire.org/index.php"
+curl.exe -s -D - -o NUL -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj -d "query=$query" "http://natas28.natas.labs.overthewire.org/index.php" | select-string 'Location'
 ```
 - `-s, --silent` is silent mode
 - `-D, --dump-header <filename>` writes the received headers to <filename> (in this case `-` which is stdout)
 - `-o, --output <file>` writes to file instead of stdout (in this case `NUL` to discard the body)
 
-Output:
-```http
-HTTP/1.1 302 Found
-Date: Mon, 27 Apr 2026 20:07:11 GMT
-Server: Apache/2.4.58 (Ubuntu)
+`$query = "joke"`:
+```txt
 Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIQgA1C82eT1228lUHOW3X2KSh%2FPMVHnhLmbzHIY7GAR1bVcy3Ix3D2Q5cVi8F6bmY%3D
-Content-Length: 920
-Content-Type: text/html; charset=UTF-8
 ```
 
-Let's make a `PHP` script that extracts the `query string` with `curl` for convenience.
-
-[level-28/query.php](level-28/query.php):
-```php
-<?php
-
-if (!isset($argv[1])) {
-  echo "Usage: php query.php <input>\n";
-  exit(1);
-}
-
-$input = $argv[1];
-
-$output = shell_exec(
-  'curl -s -L -D - -o /dev/null -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj ' .
-    '-d "query=' . $input . '" ' .
-    'http://natas28.natas.labs.overthewire.org/index.php'
-);
-
-preg_match('/Location:\s*.*query=([^\s]+)/i', $output, $m);
-
-echo "$m[1]" . PHP_EOL;
+`$query = "computer"`:
+```txt
+Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPLOxD5BEouuJBr2svTs3MqTiW3pCIT4YQixZ%2Fi0rqXXY5FyMgUUg%2BaORY%2FQZhZ7MKM%3D
 ```
 
-`php level-28/query.php joke`:
-```text
-G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIQgA1C82eT1228lUHOW3X2KSh%2FPMVHnhLmbzHIY7GAR1bVcy3Ix3D2Q5cVi8F6bmY%3D
+And these are the same as the `query` strings we got when we submitted the form in the browser!
+
+Let's see if we are dealing with `ECB` (Electronic Codebook) mode.
+`ECB` mode **encrypts each block independently**, so if the same plaintext block is encrypted multiple times, it will produce the same ciphertext block.
+
+So let's try a very long repeated character string.
+
+`$query = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"`:
+```txt
+Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPJfIqcn9iVBmkZvmvU4kfmy9jPmsF%2BGYia4Y4FxErHJK%2FYz5rBfhmImuGOBcRKxySv2M%2BawX4ZiJrhjgXESsckr9WBUJHTJsGAxtf2jb2h6z6CVIvMBz502rHAj8WWUjFqXOc2QUi%2BnqG%2BVdztW%2BfjA
 ```
 
-Notice that the `query` parameter is **URL-encoded Base64**.
+Let's decode this `query` string and see if we can find any repeated blocks.
 
-Let’s write another `PHP` script that **decodes** the `query string` and displays the ciphertext in **16-byte blocks** encoded in `Base64`.
-
-[level-28/decode.php](level-28/decode.php):
-```php
-<?php
-
-$query = trim(file_get_contents("php://stdin"));
-$cipher = base64_decode(urldecode($query));
-$blocks = str_split($cipher, 16);
-
-echo strlen($cipher) . " bytes: ";
-foreach ($blocks as $b) {
-  echo base64_encode($b) . "  ";
-}
-echo PHP_EOL;
+`php decode.php $qstr`:
+```txt
+144 bytes
+Block 0: 1be82511a7ba5bfd578c0eef466db59c
+Block 1: dc84728fdcf89d93751d10a7c75c8cf2
+Block 2: 5f22a727f625419a466f9af53891f9b2
+Block 3: f633e6b05f866226b863817112b1c92b
+Block 4: f633e6b05f866226b863817112b1c92b
+Block 5: f633e6b05f866226b863817112b1c92b
+Block 6: f560542474c9b06031b5fda36f687acf
+Block 7: a09522f301cf9d36ac7023f165948c5a
+Block 8: 9739cd90522fa7a86f95773b56f9f8c0
 ```
 
-First run `cd level-28` to navigate to the level-28 directory (for convenience).
+And yes! Blocks 3, 4, and 5 are the same!
+This confirms (enough for our purposes) that we are indeed dealing with `ECB` mode.
+Also, each block is 16 bytes, which is the block size of `AES`.
 
-`php query.php joke | php decode.php`:
-```text
-80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  EIANQvNnk9dtvJVBzlt19g==  KSh/PMVHnhLmbzHIY7GARw==  VtVzLcjHcPZDlxWLwXpuZg==
-```
+The server probably uses `SQL` to look up the `query` in the database.
+Something like `SELECT joke FROM jokes WHERE query LIKE '% QUERY %'`.
 
-Let's try another search term (that produces jokes) like `computer`.
+Our best attack vector is to try `SQL` injection somehow to get the password of `natas29`.
 
-`php query.php computer`:
-```text
-G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPLOxD5BEouuJBr2svTs3MqTiW3pCIT4YQixZ%2Fi0rqXXY5FyMgUUg%2BaORY%2FQZhZ7MKM%3D
-```
+`ECB` allows us to **swap blocks** like Legos.
 
-`php query.php computer | php decode.php`:
-```text
-80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  zsQ+QRKLriQa9rL07NzKkw==  iW3pCIT4YQixZ/i0rqXXYw==  kXIyBRSD5o5Fj9BmFnswow==
-```
+But a block (after the fixed prefix) can still have its own prefix!
 
-The **first 2 ciphertext blocks** are identical for *"joke"* and *"computer"*, suggesting a **fixed prefix**.
+We need to figure out where exactly our input starts inside a 16-byte block, i.e. how many characters of padding are needed so that the first byte we control lands exactly at the start of an AES block boundary.
 
-Let's vary the input length to see how it affects ciphertext **block alignment**:
+For this, we'll use a loop that keeps adding A's:
 ```powershell
-1..20 | ForEach-Object { $a = "A" * $_; "$_ : $a : $(php query.php $a | php decode.php)" }
+0..20 | % { "{0:D2}: " -f $_ + (curl.exe -s -D - -o NUL -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj -d ("query=" + ("A" * $_)) "http://natas28.natas.labs.overthewire.org/index.php" | sls "Location") }
 ```
 
 Output (important part):
-```text
-12 : AAAAAAAAAAAA : 80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  h1J9Q3czmMbvHxFKUToAKA==  df1QRP0GPSb2u39zS0HImQ==
-13 : AAAAAAAAAAAAA : 96 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  xkduQZYZ04f0V3MSJfFf4Q==  YiOhTZxCkbmHdbA/vHPU7Q==  2K5R19pxsrCD2Rmg17iLmA==
-```
-
-At 13 characters, an extra ciphertext block appears.
-
-This shows the input fills only ~12 bytes of the first 16-byte block before overflowing into the next block, meaning a fixed prefix is already occupying part of that block.
-This behavior is consistent with a 16-byte block cipher in ECB mode.
-
-Let's try different characters at the end (12th character) (including punctuation):
-```powershell
-php query.php "AAAAAAAAAAAB" | php decode.php
-php query.php "AAAAAAAAAAAc" | php decode.php
-php query.php "AAAAAAAAAAA!" | php decode.php
-php query.php "AAAAAAAAAAA'" | php decode.php
-```
-
-Output:
 ```txt
-80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  T0d9WGqFhNi7IDZHOVRzVw==  df1QRP0GPSb2u39zS0HImQ==
-80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  3oT10ThdEDueyRxN8Ed/KQ==  df1QRP0GPSb2u39zS0HImQ==
-80 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  g68AP4uzVKIYIhZ9OOygjg==  df1QRP0GPSb2u39zS0HImQ==
-96 bytes: G+glEae6W/1XjA7vRm21nA==  3IRyj9z4nZN1HRCnx1yM8g==  XyKnJ/YlQZpGb5r1OJH5sg==  Zn735bld6KgLc8sEaILMog==  YiOhTZxCkbmHdbA/vHPU7Q==  2K5R19pxsrCD2Rmg17iLmA==
+08: Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPLNQ6RxZsY7UPRe5yiycfUiiW3pCIT4YQixZ%2Fi0rqXXY5FyMgUUg%2BaORY%2FQZhZ7MKM%3D
+09: Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPKIFsYeK8Y3JmD4ecRfI3d%2BoJUi8wHPnTascCPxZZSMWpc5zZBSL6eob5V3O1b5%2BMA%3D
+10: Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPJfIqcn9iVBmkZvmvU4kfmyc4pf%2B0pFACRndRda5Za71vNN8znGntzhH2ZQu87WJwI%3D
+11: Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPJfIqcn9iVBmkZvmvU4kfmyNjNpR93%2FBz0TLCI5HmVRCMqM9OYQkTq645oGdhkgSlo%3D
+12: Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPJfIqcn9iVBmkZvmvU4kfmyh1J9Q3czmMbvHxFKUToAKHX9UET9Bj0m9rt%2Fc0tByJk%3D
 ```
+
+After 10 A’s, `JfIqcn9iVBmkZvmvU4kfmy` always appears in a stable position relative to the fixed prefix.
+
+This shows that 10 bytes of input are required before our user-controlled data begins at a 16-byte AES block boundary.
+So we need to add **10 bytes of padding** to align our input with the start of a new block.
+
+For our `SQL` injection, we will need to use `'` to break out of the string context!
+
+If we suspect SQL-style escaping is happening, then `'` would be transformed into `\'` before the query is processed further.
+This means that `AAAAAAAAA'` would effectively become `AAAAAAAAA\'`.
+
+If `AAAAAAAAA'` and `AAAAAAAAA\` produce the same stable block segment, then at this alignment point they likely result in the same effective plaintext block before encryption.
+Under the SQL-escaping hypothesis, this is consistent with `'` being transformed into `\'`, so `AAAAAAAAA'` would effectively become `AAAAAAAAA\'`.
+
+Let's test this hypothesis by sending both `AAAAAAAAA'` and `AAAAAAAAA\` as queries and checking if they produce the same stable block.
+
+`$query = "AAAAAAAAA'"`:
+```txt
+Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIWJ2pwLjKxd0ddiQ3a1c5lstdkbwCSkbjZzJR1FrozncqM9OYQkTq645oGdhkgSlo%3D
+```
+
+`$query = "AAAAAAAAA\"`:
+```txt
+Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIWJ2pwLjKxd0ddiQ3a1c5lfN5woKhSkQjlY0g5eVSYncqM9OYQkTq645oGdhkgSlo%3D
+```
+
+Both query strings have the `IWJ2pwLjKxd0ddiQ3a1c5lstdkbwCSk` after the fixed prefix!
+
+Which supports our working hypothesis and attack vector.
 
