@@ -390,7 +390,7 @@ if(array_key_exists("submit", $_POST)) {
 
 Notice the `encodeSecret` function. We can reverse it to get the original secret.
 
-[level-08\decode.php](level-08\decode.php)
+[level-08/decode.php](level-08/decode.php)
 ```php
 <?php
 echo base64_decode(strrev(hex2bin($argv[1]))) . "\n";
@@ -638,7 +638,7 @@ So if we set `showpassword` to `yes` in the **cookie**, it will be shown on the 
 
 So `plaintext XOR key = ciphertext` and `ciphertext XOR key = plaintext`.
 
-[level-11\cookie.php](level-11\cookie.php)
+[level-11/cookie.php](level-11/cookie.php)
 ```php
 <?php
 
@@ -1064,7 +1064,7 @@ We can use `natas16" AND password LIKE BINARY "a%" #` as the username to extract
 
 But this will take a long time, so let's write a script to automate this!
 
-[level-15\blind_sql.bash](level-15\blind_sql.bash)
+[level-15/blind_sql.bash](level-15/blind_sql.bash)
 ```bash
 #!/bin/bash
 
@@ -1204,7 +1204,7 @@ We can use `! echo "$response" | grep -q "apple"` to check if the output is empt
 
 We'll automate this with a script again!
 
-[level-16\blind_command_substitution.bash](level-16\blind_command_substitution.bash)
+[level-16/blind_command_substitution.bash](level-16/blind_command_substitution.bash)
 ```bash
 #!/bin/bash
 
@@ -1359,7 +1359,7 @@ Now we can use `natas18" AND password LIKE BINARY "a%" AND SLEEP(5) --` to extra
 
 Let's automate this with a script again!
 
-[level-17\time_based_blind_sql.bash](level-17\time_based_blind_sql.bash)
+[level-17/time_based_blind_sql.bash](level-17/time_based_blind_sql.bash)
 ```bash
 #!/bin/bash
 
@@ -1577,7 +1577,7 @@ So we can just try all possible session IDs from 1 to 640 and see if any of them
 
 Let's automate this with a script again!
 
-[level-18\session_bruteforce.bash](level-18\session_bruteforce.bash)
+[level-18/session_bruteforce.bash](level-18/session_bruteforce.bash)
 ```bash
 #!/bin/bash
 
@@ -1779,7 +1779,7 @@ We can try all possible hex-encoded session IDs and see if any of them have `adm
 
 Let's automate this with a script again!
 
-[level-19\session_hex_bruteforce.bash](level-19\session_hex_bruteforce.bash)
+[level-19/session_hex_bruteforce.bash](level-19/session_hex_bruteforce.bash)
 ```bash
 #!/usr/bin/env bash
 
@@ -3019,7 +3019,7 @@ And `__destruct()` **writes** `$exitMsg` to a **file** using `fwrite()`.
 
 So we generate a serialized `Logger` object where we control its properties, so that `__destruct()` writes our payload into a file when the object is destroyed.
 
-[level-26\logger_payload.php](level-26\logger_payload.php)
+[level-26/logger_payload.php](level-26/logger_payload.php)
 ```php
 <?php
 
